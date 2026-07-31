@@ -81,7 +81,7 @@ export interface Horse {
   injuryDays: number;
 
   form: number[];
-  formLines: string[];
+  formLines: FormLine[];
   wins: number;
   runs: number;
   earnings: number;
@@ -119,6 +119,19 @@ export interface FieldEntry {
   silk?: string;
   player: boolean;
   expMod?: number;
+}
+
+export interface FormLine {
+  day: number;
+  year: number;
+  race: string;
+  course: CourseName;
+  dist: number;
+  going: string;
+  pos: number;
+  of: number;
+  sp: string;
+  cmt: string;
 }
 
 export interface ScoredEntry extends FieldEntry {

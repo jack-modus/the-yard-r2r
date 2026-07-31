@@ -10,7 +10,7 @@ import {
 import type { CourseName, RaceCard } from "@/lib/sim";
 import type { Tactic } from "@/lib/sim/commentary";
 import { NEWS_LINES, QUIET_DAYS, trainingMoment } from "./content";
-import { note, withHorse } from "./stateUtils";
+import { note } from "./stateUtils";
 import type { EnteredRace, GameState, TrainingPlan } from "./types";
 
 export function newGame(playerName: string, yardId: keyof typeof YARDS, used: Set<string>): GameState {
@@ -128,11 +128,12 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
   let horses = s.horses.map(h => ({ ...h }));
   const msgs: { day: number; text: string }[] = [];
   let newsLine: string | null = null;
-  let trust = s.trust, cash = s.cash;
+  const trust = s.trust, cash = s.cash;
   const mastery = { ...s.mastery };
   const milestones = { ...s.milestones };
   const epilogue = s.epilogue;
-  let results = s.results, entered = s.entered, slate = s.slate;
+  const results = s.results, entered = s.entered;
+  let slate = s.slate;
   let queue: GameState["queue"] = [];
 
   // --- going update, a few days out: weather can turn a declared race against you ---

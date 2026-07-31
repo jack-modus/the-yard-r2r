@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Archived prototype kept for reference during extraction — not linted as app code.
+    "reference/**",
   ]),
 ]);
 

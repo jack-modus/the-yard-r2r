@@ -1,7 +1,8 @@
 // Day-to-day flavour content and the trainingMoment decision generator,
 // extracted verbatim from reference/rags-to-riches-v6.jsx.
 import { clamp, pick, ri } from "@/lib/sim";
-import { YARDS } from "@/lib/sim";
+import { YARD } from "@/lib/sim";
+import type { Yard } from "@/lib/sim";
 import { note, withHorse } from "./stateUtils";
 import type { DecisionEvent, GameState } from "./types";
 
@@ -20,7 +21,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
   const fit = s.horses.filter(h => h.injuryDays === 0);
   if (!fit.length) return null;
   const h = pick(fit);
-  const yard = YARDS[s.yardId];
+  const yard = YARD;
   const templates: DecisionEvent[] = [
     {
       title: `${h.name} is fresh this morning`,
@@ -69,11 +70,19 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
         { label: "Let it reveal itself in races", hint: "no change — races may reveal it anyway", apply: st => st },
       ],
     },
+    {
+      title: "The local paper wants a word",
+      text: `A reporter's on the phone chasing a line about ${h.name} for the weekend edition. ${yard.boss} leaves it to you — but insiders notice a trainer who's always chasing headlines.`,
+      choices: [
+        { label: "Give them a big quote", hint: "+celebrity (more) · -reputation (small)", apply: st => note({ ...st, celebrity: clamp(st.celebrity + 6, 0, 100), reputation: clamp(st.reputation - 2, 0, 100) }, `Your quote runs under a big photo of ${h.name}. The public loves it. A couple of trainers you respect raise an eyebrow at the showmanship.`) },
+        { label: "Keep it modest, stick to the facts", hint: "+reputation (small)", apply: st => note({ ...st, reputation: clamp(st.reputation + 2, 0, 100) }, `A quiet, professional quote. Nothing anyone will remember by name — but it's the kind of answer other trainers respect.`) },
+      ],
+    },
   ];
   return pick(templates);
 }
 
-export const NEWS_LINES = (yard: (typeof YARDS)[keyof typeof YARDS], courseNames: string[]) => [
+export const NEWS_LINES = (yard: Yard, courseNames: string[]) => [
   `${yard.boss} is in the racing pages today — ${pick(["a winner at the weekend meeting", "quotes about the yard's spring targets", "a bullish word for the stable's big hope"])}.`,
   `Word from the racecourse: the going at ${pick(courseNames)} is officially ${pick(["quickening", "easing after rain", "riding dead"])}.`,
   `An owner sends a crate of beer to the tack room. Morale up across the yard.`,

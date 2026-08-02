@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { YARDS } from "@/lib/sim";
-import type { CourseName, GearId, RaceCard, YardId } from "@/lib/sim";
+import { YARD } from "@/lib/sim";
+import type { CourseName, GearId, RaceCard } from "@/lib/sim";
 import {
   advanceDay, chooseDecision as engineChooseDecision, enterRace as engineEnterRace, newGame,
 } from "@/lib/game/engine";
@@ -51,14 +51,14 @@ export default function Home() {
   if (!g) {
     return (
       <IntroScreen
-        onStart={(name, yardId: YardId) => {
-          setG(newGame(name, yardId, new Set<string>()));
+        onStart={(name) => {
+          setG(newGame(name, new Set<string>()));
         }}
       />
     );
   }
 
-  const yard = YARDS[g.yardId];
+  const yard = YARD;
   const decision = g.queue[0] || null;
   const raceToday = g.entered && g.entered.raceDay <= g.day + 1;
   const advanceLocked = !!decision || !!g.flash || !!g.liveRace;

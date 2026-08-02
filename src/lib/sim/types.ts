@@ -28,15 +28,13 @@ export interface Yard {
   boss: string;
   yardName: string;
   persona: string;
-  tracks: [CourseName, CourseName];
+  tracks: CourseName[]; // tier-1 (starting) courses — see courses.ts TIER1/TIER2
   jockey: { name: string; skill: number };
   style: string;
   greeting: (playerName: string) => string;
   praise: string[];
   scold: string[];
 }
-
-export type YardId = "berrow" | "delacroix" | "okafor";
 
 export type GearId = "blinkers" | "cheekpieces" | "tonguetie" | "hood";
 

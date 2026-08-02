@@ -104,7 +104,10 @@ export function makeSlate(day: number, homeTracks: CourseName[], horseOR: number
   return options;
 }
 
-export const RIVAL_TRAINERS = ["W. Haggerty", "A. Balding-Rowe", "J. Gosforth", "C. Appleford", "R. Varley", "K. Burke-Staunton", "E. Walkden", "H. Palmer-Reed"];
+// Frank Berrow and Sonny Okafor were two of the original three boss
+// personas before the single-trainer redesign — repurposed here as rival
+// trainers rather than discarded, so their writing still surfaces in results.
+export const RIVAL_TRAINERS = ["W. Haggerty", "A. Balding-Rowe", "J. Gosforth", "C. Appleford", "R. Varley", "K. Burke-Staunton", "E. Walkden", "H. Palmer-Reed", "Frank Berrow", "Sonny Okafor"];
 export const SILKS = ["#a4161a", "#0b3d91", "#e8b117", "#1b7a43", "#5e2b97", "#d2601a", "#0e7c86", "#7a1f5c"];
 
 export function makeField(race: RaceCard, horseOR: number, used: Set<string>): FieldEntry[] {

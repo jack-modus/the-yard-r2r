@@ -88,3 +88,10 @@ export const INSIGHTS: Record<CourseName, string[]> = {
 };
 
 export const MASTERY_STEPS = [20, 40, 60, 80, 95];
+
+// Track-tier progression: tier 1 is open from the start (deliberately close
+// together, all real-data-calibrated — see classStats.ts), tier 2 unlocks
+// once Reputation clears REPUTATION_TIER2_UNLOCK (see game/engine.ts).
+// Doncaster is tier 2 specifically so the St Leger is something to build to.
+export const TIER1_COURSES: CourseName[] = ["Newmarket", "Epsom", "Sandown", "Goodwood"];
+export const TIER2_COURSES: CourseName[] = ["Ascot", "Doncaster", "York", "Chester"];

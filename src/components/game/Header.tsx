@@ -13,6 +13,7 @@ export function Header({ g, yard, onHelp }: { g: GameState; yard: Yard; onHelp: 
         <span>YR {g.year} · DAY {g.day}</span>
         <span>{money(g.cash)}</span>
         <span>TRUST {g.trust}</span>
+        <span>REP {g.reputation}</span>
         <span
           onClick={onHelp}
           className="ml-auto cursor-pointer text-gold-500 border border-gold-500 rounded-full w-[18px] h-[18px] inline-flex items-center justify-center font-bold"

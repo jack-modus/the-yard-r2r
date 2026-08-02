@@ -1,6 +1,6 @@
 // Game state shape, extracted from the useState/reducer logic in
 // reference/rags-to-riches-v6.jsx and given real types.
-import type { CourseName, Horse, RaceCard, ScoredEntry, YardId } from "@/lib/sim";
+import type { CourseName, Horse, RaceCard, ScoredEntry } from "@/lib/sim";
 
 export type { FormLine } from "@/lib/sim";
 
@@ -19,6 +19,7 @@ export interface Milestones {
   listedWin: boolean;
   groupWin: boolean;
   g1Win: boolean;
+  tier2Unlocked: boolean;
 }
 
 export interface Choice {
@@ -50,11 +51,16 @@ export type TrainingPlan = "gallop" | "canter" | "sprints" | "stalls" | "school"
 
 export interface GameState {
   playerName: string;
-  yardId: YardId;
   day: number;
   year: number;
   cash: number;
-  trust: number;
+
+  // The four metrics — see CLAUDE.md "The four metrics" for the full design.
+  trust: number; // the boss's private opinion of you — movable by things other than results
+  reputation: number; // insiders' read on your ability — lagging, results-driven, grade-weighted
+  celebrity: number; // public/media profile — can pull against reputation
+  skill: number; // your actual capability — never falls, an XP bar not a score
+
   horses: Horse[];
   usedNames: Set<string>;
   mastery: Record<CourseName, number>;

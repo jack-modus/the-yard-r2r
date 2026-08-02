@@ -1,5 +1,6 @@
 import { COURSES, INSIGHTS, MASTERY_STEPS } from "@/lib/sim";
 import type { CourseName, Yard } from "@/lib/sim";
+import { REPUTATION_TIER2_UNLOCK, unlockedCourses } from "@/lib/game/engine";
 import type { GameState } from "@/lib/game/types";
 import { Card } from "@/components/ui/Card";
 import { PlanButton } from "@/components/ui/PlanButton";
@@ -20,12 +21,27 @@ export function NotebookTab({
         {walkPlan && <b className="text-gold-300"> Queued: walking {walkPlan} tomorrow — the string gets an easy day.</b>}
         {g.study && <b className="text-gold-300"> Studying {g.study} (+1/day).</b>}
       </div>
-      {(Object.keys(COURSES) as CourseName[]).map(course => {
-        const m = Math.round(g.mastery[course]);
-        const home = yard.tracks.includes(course);
-        const unlocked = MASTERY_STEPS.filter(t => m >= t).length;
-        return (
-          <Card key={course} className={home ? "border border-gold-500" : ""}>
+      {(() => {
+        const unlockedTracks = unlockedCourses(g.reputation);
+        return (Object.keys(COURSES) as CourseName[]).map(course => {
+          const trackLocked = !unlockedTracks.includes(course);
+          if (trackLocked) {
+            return (
+              <Card key={course} className="opacity-60">
+                <div className="flex justify-between items-baseline">
+                  <span className="font-bold text-base">🔒 {course}</span>
+                </div>
+                <div className="font-mono text-[11.5px] text-muted-dim">
+                  Unlocks once your reputation reaches {REPUTATION_TIER2_UNLOCK} (currently {Math.round(g.reputation)}).
+                </div>
+              </Card>
+            );
+          }
+          const m = Math.round(g.mastery[course]);
+          const home = yard.tracks.includes(course);
+          const unlocked = MASTERY_STEPS.filter(t => m >= t).length;
+          return (
+            <Card key={course} className={home ? "border border-gold-500" : ""}>
             <div className="flex justify-between items-baseline">
               <span className="font-bold text-base">{course}{home ? " ★" : ""}</span>
               <span className="font-mono font-bold text-sm">{m}/100</span>
@@ -56,7 +72,8 @@ export function NotebookTab({
             </div>
           </Card>
         );
-      })}
+        });
+      })()}
     </div>
   );
 }

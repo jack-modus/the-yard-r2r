@@ -91,6 +91,13 @@ export interface Horse {
   gear: GearId[];
   gearRun: GearId[];
   mark: number | null; // official handicap mark; null until the horse has run
+
+  // Set only on persistent roster horses (lib/sim/roster.ts) — the class
+  // band they were generated for. Field composition is drawn by matching
+  // this tag exactly, not by re-deriving a band from OR() after the fact:
+  // OR-proximity filtering lets neighbouring bands' Gaussian tails bleed
+  // into each other and inflates effective field spread past what's real.
+  rosterBand?: Grade;
 }
 
 export interface RaceCard {

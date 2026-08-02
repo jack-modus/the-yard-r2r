@@ -11,3 +11,5 @@ export * from "./format";
 export * from "./race";
 export * from "./calendar";
 export * from "./commentary";
+export * from "./classStats";
+export * from "./roster";

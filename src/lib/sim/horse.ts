@@ -2,13 +2,15 @@
 // Visible stats: speed, stamina, accel, break (gate speed), balance (turns/camber/undulation),
 // temperament (consistency — higher = less erratic). Hidden until discovered: going pref, distance sweet spot.
 import { clamp, nid, pick, ri, rnd } from "./utils";
-import { takeName } from "./names";
+import { NAMES, takeName } from "./names";
 import type { Horse } from "./types";
 
 export function makeHorse(q: number, used: Set<string>, opts: { age?: number; fitness?: number } = {}): Horse {
   return {
+    // Sire/dam don't dedupe against `used` — real sires cover many foals,
+    // and only the horse's own name needs to be unique/visible in the UI.
     id: nid(), name: takeName(used),
-    sire: takeName(used), dam: takeName(used),
+    sire: pick(NAMES), dam: pick(NAMES),
     colour: pick(["b", "b", "ch", "ch", "gr", "br"]), sex: pick(["c", "f", "g", "f", "c"]), age: opts.age ?? ri(2, 4),
     speed: clamp(Math.round(q + rnd(-6, 6)), 25, 99),
     stamina: clamp(Math.round(q + rnd(-6, 6)), 25, 99),

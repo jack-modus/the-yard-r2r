@@ -23,6 +23,19 @@ export const NAMES = [
   "Shilling For The Meter","Downhill From Here","The Patient Assassin","Cobbles And Chrome","Firecracker Freda",
   "Overheard In Oakham","The Unlikely Lad","Sea Fret Sonata","Ballad Of Bempton","Knavesmire Nocturne",
   "Roodee Runaround","Tattenham Tearaway","Esher Express","Rowley Mile Rebel","Dip Your Colours",
+  // Padded out so a ~120-horse persistent roster doesn't exhaust the pool.
+  "Cheap Seats Charlie","Marzipan Moonshine","The Careful Liar","Bramble Hill Bandit","Sunday Best Sonny",
+  "Widow's Peak","No Fixed Abode","The Understated Duke","Kettlewell Comet","Paddock Gossip",
+  "Last Laugh Larkin","The Modest Marvel","Wrong Turn Winnie","Curfew Breaker","Snowdrop Sonata",
+  "The Careless Whisper","Ferryman's Fee","Highgate Hustler","Quietly Confident","The Bookie's Nightmare",
+  "Salt And Vinegar","Restless Native","The Tailor's Cut","Windmill Waltz","Cobweb Corner",
+  "Foxglove Fury","The Unread Letter","Parting Shot","Mistle Thrush","The Clockmaker's Son",
+  "Barefoot In Bruton","Yesterday's Papers","The Long Odds","Chimney Sweep Sal","Errant Knight",
+  "The Overcoat","Gravel Voice","Between The Lines","The Careful Word","Wychwood Whisper",
+  "Tender Is The Night","The Nightwatchman","Betting Ring Ballad","Silent Partner","The Understeer",
+  "Corner Shop Cassie","Late Bloomer's Reel","The Unspoken Rule","Wayfaring Stranger","Candlewick Sky",
+  "The Absent Landlord","Furlong And Away","Nobody's Fool","The Careful Optimist","Weathervane Willow",
+  "Pocket Change Percy","The Long Way Round","Doubtful Weather","Meadowsweet Mabel","The Kindly Stranger",
 ];
 
 export function takeName(used: Set<string>): string {

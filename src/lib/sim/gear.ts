@@ -2,19 +2,23 @@
 // Extracted verbatim from reference/rags-to-riches-v6.jsx.
 import type { GearId, GearItem, Horse } from "./types";
 
+// noiseAdj values are scaled ~5.25x from the original prototype to track
+// lib/sim/race.ts's recalibrated noiseSd range (0.26-1.16 vs the original
+// 0.05-0.22) — otherwise gear's effect on consistency would round to
+// nothing against the new, realistically-larger race-day noise.
 export const GEAR: Record<GearId, GearItem> = {
   blinkers: { label: "Blinkers",
     help: "Restricts a horse's vision to encourage focus. Sharpens a keen or unfocused horse's finishing effort — but can backfire on one that was already racing sensibly.",
-    apply: (exp) => exp * 1.05, noiseAdj: h => (h.temperament >= 60 ? 0.015 : -0.01) },
+    apply: (exp) => exp * 1.05, noiseAdj: h => (h.temperament >= 60 ? 0.08 : -0.05) },
   cheekpieces: { label: "Cheekpieces",
     help: "A gentler version of blinkers — a subtler focus aid with less risk of overdoing it.",
-    apply: (exp) => exp * 1.02, noiseAdj: () => -0.005 },
+    apply: (exp) => exp * 1.02, noiseAdj: () => -0.026 },
   tonguetie: { label: "Tongue Tie",
     help: "Stops the tongue interfering with breathing at speed. Low risk, modest and reliable benefit for a horse that empties the tank late.",
     apply: (exp) => exp * 1.015, noiseAdj: () => 0 },
   hood: { label: "Hood",
     help: "Cuts down noise and peripheral distraction for a nervy traveller. Calms rather than sharpens — makes a horse more consistent, not faster.",
-    apply: (exp) => exp, noiseAdj: () => -0.02 },
+    apply: (exp) => exp, noiseAdj: () => -0.105 },
 };
 
 // Real racecard letters, shown next to a horse's name (e.g. "b" for first-time blinkers).

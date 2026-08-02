@@ -58,6 +58,7 @@ export interface GameState {
   horses: Horse[];
   usedNames: Set<string>;
   mastery: Record<CourseName, number>;
+  roster: Horse[]; // persistent circuit rivals — see lib/sim/roster.ts
   slate: RaceCard[];
   entered: EnteredRace | null;
   results: RaceResultEntry[];

@@ -4,7 +4,7 @@
 import {
   CMT_ALSO, CMT_PLACE, CMT_WIN,
   COURSES, GEAR, GOINGS, OR, PRIZE, YARDS,
-  clamp, effRating, makeBeats, makeField, makeHorse, makeRagsHorse, makeSlate,
+  clamp, drawField, effRating, makeBeats, makeHorse, makeRagsHorse, makeRoster, makeSlate,
   pick, ri, runRace,
 } from "@/lib/sim";
 import type { CourseName, RaceCard } from "@/lib/sim";
@@ -22,7 +22,7 @@ export function newGame(playerName: string, yardId: keyof typeof YARDS, used: Se
   return {
     playerName: name,
     yardId, day: 1, year: 1, cash: 500, trust: 20,
-    horses: [rags], usedNames: used, mastery,
+    horses: [rags], usedNames: used, mastery, roster: makeRoster(used),
     slate: [], entered: null, results: [], queue: [], flash: null, liveRace: null, study: null,
     messages: [
       { day: 1, text: yard.greeting((playerName || "").trim() || "kid") },
@@ -59,10 +59,17 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
     }
   }
 
-  const field = makeField(race, effRating(me), st.usedNames);
-  field.push({ horse: me, jkSkill: yard.jockey.skill, trainerName: yard.yardName, silk: "#14100a", player: true, expMod });
+  const { entries: rivals, usedIds: rivalIds } = drawField(st.roster, race, new Set(), st.usedNames);
+  const field = [...rivals, { horse: me, jkSkill: yard.jockey.skill, trainerName: yard.yardName, silk: "#14100a", player: true, expMod }];
   const res = runRace(race, field, mastery);
   const mine = res.find(r => r.player)!;
+  const rivalIdSet = new Set(rivalIds);
+  const roster = st.roster.map(h => {
+    if (!rivalIdSet.has(h.id)) return h;
+    const r = res.find(x => x.horse.id === h.id);
+    if (!r) return h;
+    return { ...h, runs: h.runs + 1, wins: h.wins + (r.pos === 1 ? 1 : 0), form: [r.pos > 9 ? 0 : r.pos, ...h.form].slice(0, 6) };
+  });
   me.runs++; me.fatigue = clamp(me.fatigue + 26, 0, 100); me.fitness = clamp(me.fitness + 3, 0, 100);
   mastery[race.course] = clamp(mastery[race.course] + 6, 0, 100);
   const prize = PRIZE[race.grade][mine.pos - 1] || 0;
@@ -116,7 +123,7 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
   }
   results = [{ race, res: res.slice(0, 6), mine, cmt }, ...results].slice(0, 30);
   return {
-    ...st, horses, trust, cash, mastery, milestones, epilogue, results, entered: null,
+    ...st, horses, roster, trust, cash, mastery, milestones, epilogue, results, entered: null,
     liveRace: { raceName: race.name, beats: makeBeats(race, res, mine, tactic), idx: 0 },
     messages: [...msgs, ...st.messages].slice(0, 60),
   };

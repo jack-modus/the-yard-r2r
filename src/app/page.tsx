@@ -20,6 +20,7 @@ import { StableTab } from "@/components/game/StableTab";
 import { RacingTab, type RaceSub, type ResultsFilter } from "@/components/game/RacingTab";
 import { NotebookTab } from "@/components/game/NotebookTab";
 import { YardTab } from "@/components/game/YardTab";
+import { COLUMN } from "@/components/ui/layout";
 
 export default function Home() {
   const [g, setG] = useState<GameState | null>(null);
@@ -81,7 +82,8 @@ export default function Home() {
   const toggleStudy = (course: CourseName) => setG(s => s && ({ ...s, study: s.study === course ? null : course }));
 
   return (
-    <div className="min-h-screen font-diary bg-ink-950 text-[#eee6f2] pb-24">
+    <div className="min-h-screen bg-ink-950">
+    <div className={`${COLUMN} font-diary text-[#eee6f2] pb-24`}>
       <Header g={g} yard={yard} onHelp={() => setHelpOpen(true)} />
 
       {g.epilogue && <EpilogueBanner yard={yard} />}
@@ -141,6 +143,7 @@ export default function Home() {
         onClick={advance}
         label={g.liveRace ? "RACE IN PROGRESS" : decision ? "DECISION REQUIRED" : g.flash ? "READ THE DIARY" : raceToday ? "RACE DAY →" : "NEXT DAY →"}
       />
+    </div>
     </div>
   );
 }

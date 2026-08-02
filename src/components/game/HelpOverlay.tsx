@@ -1,10 +1,11 @@
 import { HELP } from "@/lib/game/help";
+import { COLUMN_PLAIN } from "@/components/ui/layout";
 
 export function HelpOverlay({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 bg-black/80 z-40 flex items-end" onClick={onClose}>
       <div
-        className="bg-parchment text-parchment-ink w-full max-h-[82vh] overflow-y-auto rounded-t-xl px-4 pt-4 pb-6"
+        className={`${COLUMN_PLAIN} bg-parchment text-parchment-ink max-h-[82vh] overflow-y-auto rounded-t-xl px-4 pt-4 pb-6`}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex justify-between items-baseline mb-2">

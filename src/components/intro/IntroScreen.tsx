@@ -2,13 +2,15 @@
 import { useState } from "react";
 import { YARDS } from "@/lib/sim";
 import type { YardId } from "@/lib/sim";
+import { COLUMN } from "@/components/ui/layout";
 
 export function IntroScreen({ onStart }: { onStart: (name: string, yardId: YardId) => void }) {
   const [step, setStep] = useState<"name" | "yard">("name");
   const [name, setName] = useState("");
 
   return (
-    <div className="min-h-screen font-diary bg-ink-950 text-[#eee6f2] px-4 pt-5 pb-15">
+    <div className="min-h-screen bg-ink-950">
+    <div className={`${COLUMN} font-diary text-[#eee6f2] px-4 pt-5 pb-15`}>
       <h1 className="text-[26px] text-gold-300 [font-variant:small-caps] mb-1">The Yard</h1>
       <div className="text-[13px] text-muted italic mb-4">Rags to Riches</div>
 
@@ -58,6 +60,7 @@ export function IntroScreen({ onStart }: { onStart: (name: string, yardId: YardI
           ))}
         </>
       )}
+    </div>
     </div>
   );
 }

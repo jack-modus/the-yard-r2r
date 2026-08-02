@@ -1,11 +1,12 @@
 import { Button } from "@/components/ui/Button";
 import type { LiveRace } from "@/lib/game/types";
+import { COLUMN_PLAIN } from "@/components/ui/layout";
 
 export function LiveRaceOverlay({ liveRace, onNext }: { liveRace: LiveRace; onNext: () => void }) {
   const done = liveRace.idx + 1 >= liveRace.beats.length;
   return (
     <div className="fixed inset-0 bg-black/80 z-[32] flex items-center p-4">
-      <div className="bg-ink-800 border-2 border-gold-500 rounded p-4 w-full">
+      <div className={`${COLUMN_PLAIN} bg-ink-800 border-2 border-gold-500 rounded p-4`}>
         <div className="font-mono text-gold-500 tracking-wide mb-1">
           {liveRace.raceName.toUpperCase()} · {liveRace.idx + 1}/{liveRace.beats.length}
         </div>

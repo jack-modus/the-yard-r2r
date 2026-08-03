@@ -4,7 +4,9 @@
 import { CALENDAR, OR, makeHorse, ri } from "@/lib/sim";
 import type { FieldEntry, Horse, ScoredEntry } from "@/lib/sim";
 import {
-  BEAT7_BRIDGES_ADVICE, classicOutcomeMessage, makeBeat8AllyTrainer, makeClassicDoubts, makeClassicHorseChoice,
+  BEAT7_BRIDGES_ADVICE, BEAT_FATHER_BACKS_MCLEAN, BEAT_FATHER_CONFRONTED, DIAMOND_CUP_ANNOUNCEMENT,
+  classicOutcomeMessage, diamondCupClearFlash, diamondCupOutcomeMessage, diamondCupScareFlash,
+  makeBeat8AllyTrainer, makeClassicDoubts, makeClassicHorseChoice, makeDiamondCupHorseChoice,
 } from "./storyContent";
 import { unlockedCourses } from "./tracks";
 import type { ClassicArcState, ClassicOutcome, GameState, StoryState } from "./types";
@@ -76,6 +78,28 @@ export function resolveClassicOutcome(
   };
 }
 
+// The Diamond Cup is a one-off — no diminishing-returns scaling, and the
+// deltas are the biggest in the game, matching its "biggest prize in the
+// sport" framing. Same story-freshness caveat as resolveClassicOutcome.
+const DIAMOND_CUP_DELTAS: Record<ClassicOutcome, { trust: number; reputation: number; celebrity: number; skill: number }> = {
+  win: { trust: 25, reputation: 30, celebrity: 15, skill: 8 },
+  place: { trust: 12, reputation: 15, celebrity: 6, skill: 4 },
+  okay: { trust: 3, reputation: 5, celebrity: 1, skill: 2 },
+  tank: { trust: -10, reputation: -15, celebrity: -3, skill: 1 },
+};
+
+export function resolveDiamondCupOutcome(
+  story: StoryState, horseName: string, pos: number, fieldSize: number,
+): { trust: number; reputation: number; celebrity: number; skill: number; message: string; story: StoryState } {
+  const outcome = classifyClassicOutcome(pos, fieldSize);
+  const base = DIAMOND_CUP_DELTAS[outcome];
+  return {
+    trust: base.trust, reputation: base.reputation, celebrity: base.celebrity, skill: base.skill,
+    message: diamondCupOutcomeMessage(outcome, horseName),
+    story: { ...story, diamondCup: { ...story.diamondCup, stage: "done" } },
+  };
+}
+
 export function newStoryState(): StoryState {
   return {
     stage: "yard",
@@ -91,7 +115,7 @@ export function newStoryState(): StoryState {
     classicIndex: 0,
     classicResults: [],
     classicArc: scheduleClassicArc(0, 1),
-    diamondCup: { stage: "pending", horseId: null, day: null },
+    diamondCup: { stage: "pending", horseId: null, raceDay: null, nextBeatDay: null },
     fatherIntroduced: false,
   };
 }
@@ -164,6 +188,56 @@ export function checkStoryTriggers(s: GameState): GameState | null {
       ...s,
       story: { ...story, classicArc: { ...story.classicArc, doubtsDay: null } },
       queue: [...s.queue, makeClassicDoubts(horse?.name ?? "your horse", race.name)],
+    };
+  }
+
+  // --- Act 3: the Diamond Cup + father subplot. Only begins once all five
+  // Classics are done, then runs entirely on relative "days since the last
+  // beat" scheduling (nextBeatDay), not fixed calendar days — there's no
+  // fixed CALENDAR entry backing this race, it's scripted-only. ---
+  const dc = story.diamondCup;
+  if (dc.stage === "pending" && story.classicIndex >= CALENDAR.length) {
+    const raceDay = s.day + ri(35, 45);
+    return {
+      ...s,
+      story: { ...story, diamondCup: { stage: "announced", horseId: null, raceDay, nextBeatDay: s.day + ri(8, 12) } },
+      flash: DIAMOND_CUP_ANNOUNCEMENT,
+    };
+  }
+  if (dc.stage === "announced" && dc.nextBeatDay !== null && s.day >= dc.nextBeatDay) {
+    return {
+      ...s,
+      story: { ...story, fatherIntroduced: true, diamondCup: { ...dc, stage: "fatherRevealed", nextBeatDay: null } },
+      queue: [...s.queue, BEAT_FATHER_BACKS_MCLEAN],
+    };
+  }
+  if (dc.stage === "fatherRevealed" && s.day >= (dc.raceDay! - 20)) {
+    return {
+      ...s,
+      story: { ...story, diamondCup: { ...dc, stage: "confronted" } },
+      queue: [...s.queue, BEAT_FATHER_CONFRONTED],
+    };
+  }
+  if (dc.stage === "confronted" && !s.entered && s.day >= (dc.raceDay! - 12)) {
+    const eligible = s.horses.filter(h => h.injuryDays === 0);
+    if (eligible.length) {
+      return { ...s, queue: [...s.queue, makeDiamondCupHorseChoice(eligible, dc.raceDay!)] };
+    }
+  }
+  if (dc.stage === "horseChosen" && s.day >= (dc.raceDay! - 5)) {
+    const horse = s.horses.find(h => h.id === dc.horseId);
+    return {
+      ...s,
+      story: { ...story, diamondCup: { ...dc, stage: "scarePending" } },
+      flash: diamondCupScareFlash(horse?.name ?? "your horse"),
+    };
+  }
+  if (dc.stage === "scarePending" && s.day >= (dc.raceDay! - 3)) {
+    const horse = s.horses.find(h => h.id === dc.horseId);
+    return {
+      ...s,
+      story: { ...story, diamondCup: { ...dc, stage: "cleared" } },
+      flash: diamondCupClearFlash(horse?.name ?? "your horse"),
     };
   }
 

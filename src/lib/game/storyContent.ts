@@ -3,7 +3,7 @@
 // as the ordinary trainingMoment events (content.ts). Orchestration (when
 // each beat fires, the nemesis mechanics) lives in story.ts; this file is
 // just the words and their stat effects.
-import { COURSES, clamp, nid, ri } from "@/lib/sim";
+import { COURSES, YARD, clamp, nid, ri } from "@/lib/sim";
 import type { CalendarRace, CourseName, Horse } from "@/lib/sim";
 import { note } from "./stateUtils";
 import type { ClassicOutcome, DecisionEvent, GameState } from "./types";
@@ -226,4 +226,102 @@ export function makeClassicCallback(lastResult: { name: string; outcome: Classic
       { label: "Deflect — it's the horse, not you", hint: "+reputation", apply: (st: GameState) => note({ ...st, reputation: clamp(st.reputation + 2, 0, 100) }, `A modest answer. The right people notice modesty.`) },
     ],
   };
+}
+
+// ---------- Act 3: the Diamond Cup, the father subplot, the ending ----------
+export const DIAMOND_CUP_COURSE: CourseName = "Ascot";
+export const DIAMOND_CUP_DIST = 10;
+export const FATHER_NAME = "Michael Vincenzo";
+
+export const DIAMOND_CUP_ANNOUNCEMENT = [
+  `Racing's biggest story in years breaks overnight: a new prize has arrived, bigger than the Breeders' Cup itself, bigger than anything British racing has ever put up before. They're calling it the Diamond Cup.`,
+  `Bridges corners you within the hour. "Well? Are we going for it?" As if there was ever a question.`,
+  `By the following morning it's confirmed: Martin McLean has an entry in too. Of course he does.`,
+];
+
+export const BEAT_FATHER_BACKS_MCLEAN: DecisionEvent = {
+  title: "A voice from the past",
+  text: `A name you haven't seen in the papers in years turns up backing a horse: ${FATHER_NAME} — your father — quoted supporting Martin McLean for the Diamond Cup. "McLean's a proper horseman. Class always tells." ${YARD.boss} reads it over your shoulder and says nothing at all, which is somehow worse.`,
+  choices: [
+    {
+      label: "Ignore it — he's not your business anymore",
+      hint: "+reputation",
+      apply: (st: GameState) => note({ ...st, reputation: clamp(st.reputation + 3, 0, 100) }, `You don't dignify it with a reply. The right people notice you didn't rise to it.`),
+    },
+    {
+      label: "Fire back publicly",
+      hint: "+celebrity, -reputation (small)",
+      apply: (st: GameState) => note(
+        { ...st, celebrity: clamp(st.celebrity + 4, 0, 100), reputation: clamp(st.reputation - 2, 0, 100) },
+        `Your reply runs alongside his quote. Good copy. A few insiders wince at a trainer trading barbs with a disgraced old punter — even if he is your father.`,
+      ),
+    },
+  ],
+};
+
+export const BEAT_FATHER_CONFRONTED: DecisionEvent = {
+  title: "The truth of it",
+  text: `It doesn't take long to find out why he said it: McLean paid him for the quote, outright. He's still drowning in the same debts that ran him out of this game in the first place. You find him in a betting shop two towns over — smaller and greyer than you remember. He can't quite look at you. "I'm sorry, son. I'm sorry for all of it." First time in your life you've heard him say that.`,
+  choices: [
+    {
+      label: "Accept it",
+      hint: "+trust, +reputation",
+      apply: (st: GameState) => note(
+        { ...st, trust: clamp(st.trust + 5, 0, 100), reputation: clamp(st.reputation + 3, 0, 100) },
+        `You don't forgive everything. But you take the apology for what it is. Word of it reaches ${YARD.boss}, somehow, and this time the silence means something good.`,
+      ),
+    },
+    {
+      label: "Walk away and say your piece in the press instead",
+      hint: "+celebrity, -trust (small)",
+      apply: (st: GameState) => note(
+        { ...st, celebrity: clamp(st.celebrity + 5, 0, 100), trust: clamp(st.trust - 3, 0, 100) },
+        `You give the papers a better story than his — the whole sorry tale, on your terms. It runs everywhere. ${YARD.boss} isn't sure the family's dirty laundry needed quite that wide an audience.`,
+      ),
+    },
+  ],
+};
+
+export function makeDiamondCupHorseChoice(horses: Horse[], raceDay: number): DecisionEvent {
+  const going = clamp(COURSES[DIAMOND_CUP_COURSE].going + ri(-1, 1), 1, 4);
+  return {
+    title: "The Diamond Cup — who goes?",
+    text: `This is the one. The biggest purse in the sport, and it's yours to enter. Who carries the silks?`,
+    choices: horses.map(h => ({
+      label: h.name,
+      apply: (st: GameState) => note(
+        {
+          ...st,
+          entered: {
+            id: nid(), course: DIAMOND_CUP_COURSE, dist: DIAMOND_CUP_DIST, going, grade: "G1",
+            raceDay, name: "The Diamond Cup", isDiamondCup: true, horseId: h.id,
+          },
+          story: { ...st.story, diamondCup: { ...st.story.diamondCup, stage: "horseChosen", horseId: h.id } },
+        },
+        `Declared: ${h.name} for the Diamond Cup. Everything comes down to this.`,
+      ),
+    })),
+  };
+}
+
+export function diamondCupScareFlash(horseName: string): string[] {
+  return [
+    `A bad step on the gallops — ${horseName} pulls up sharply, head low, and for one heart-stopping minute nobody in the yard says a word.`,
+    `The vet's already running a hand down the tendon before you've crossed the yard. Scans booked for the morning.`,
+  ];
+}
+
+export function diamondCupClearFlash(horseName: string): string[] {
+  return [
+    `Forty-eight hours of scans, walking in hand, and holding your breath — and the vet finally says what you were praying to hear: nothing wrong. ${horseName} is fine. It was a scare, nothing more.`,
+  ];
+}
+
+export function diamondCupOutcomeMessage(outcome: ClassicOutcome, horseName: string): string {
+  switch (outcome) {
+    case "win": return `${horseName} WINS THE DIAMOND CUP! The biggest prize in the sport, and it's yours. Whatever happens next, this day is permanent.`;
+    case "place": return `${horseName} goes down fighting in the Diamond Cup, beaten but never disgraced, in the biggest field of the year.`;
+    case "okay": return `${horseName} holds its own in the Diamond Cup without ever truly threatening. Nothing to be ashamed of, on this stage.`;
+    case "tank": return `${horseName} never gets into the Diamond Cup at all. The biggest day of the year, and it never arrives for you.`;
+  }
 }

@@ -15,7 +15,8 @@ import {
   BEAT2_BRIDGES_OFFICE, BEAT5_REPORTER_PRE_RACE, BEAT6_MCLEAN_TAUNT,
 } from "./storyContent";
 import {
-  checkStoryTriggers, ensureNemesisInField, forcePosition, newStoryState, resolveClassicOutcome, scheduleNemesisIntro,
+  checkStoryTriggers, ensureNemesisInField, forcePosition, newStoryState, resolveClassicOutcome,
+  resolveDiamondCupOutcome, scheduleNemesisIntro,
 } from "./story";
 import { note } from "./stateUtils";
 import { unlockedCourses } from "./tracks";
@@ -29,6 +30,9 @@ const GRADE_WEIGHT: Record<string, number> = { G1: 18, G2: 13, G3: 9, L: 6, "3":
 const gradeWeight = (grade: Grade) => GRADE_WEIGHT[String(grade)] ?? 1;
 
 const PLAYER_NAME = "Tony Vincenzo";
+// "Bigger than the Breeders' Cup" — real Breeders' Cup Classic purses run
+// ~$6-7M; this is a fictional one-off headline number for the finale.
+const DIAMOND_CUP_PRIZE = [15_000_000, 5_000_000, 2_000_000, 1_000_000];
 
 export function newGame(used: Set<string>): GameState {
   const yard = YARD;
@@ -139,7 +143,9 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
 
   me.runs++; me.fatigue = clamp(me.fatigue + 26, 0, 100); me.fitness = clamp(me.fitness + 3, 0, 100);
   mastery[race.course] = clamp(mastery[race.course] + 6, 0, 100);
-  const prize = PRIZE[race.grade][mine.pos - 1] || 0;
+  // "Biggest prize money in the world, more than the Breeders' Cup" — a
+  // one-off purse well outside the ordinary PRIZE table, not tied to grade.
+  const prize = race.isDiamondCup ? (DIAMOND_CUP_PRIZE[mine.pos - 1] || 0) : (PRIZE[race.grade][mine.pos - 1] || 0);
   me.earnings += prize; cash += Math.round(prize * 0.08);
   const cmt = mine.pos === 1 ? pick(CMT_WIN) : mine.pos <= 3 ? pick(CMT_PLACE) : pick(CMT_ALSO);
   me.formLines = [{ day: st.day, year: st.year, race: race.name, course: race.course, dist: race.dist, going: GOINGS[race.going], pos: mine.pos, of: res.length, sp: mine.sp, cmt }, ...me.formLines].slice(0, 12);
@@ -156,7 +162,24 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
     const names: Record<string, string> = { balance: "beautifully balanced — turns and cambers barely touch it", brk: "electric from the gates", temperament: "utterly unflappable — it runs its race every time", accel: "capable of a genuinely smart turn of foot" };
     msgs.push({ day: st.day, text: `Now everyone can see what you saw in the bottom box: ${me.name} is ${names[me.quirk.stat]}.` });
   }
-  if (race.isClassic) {
+  if (race.isDiamondCup) {
+    // The finale — biggest deltas in the game, no diminishing returns
+    // (it only ever happens once). Ending computation is wired in
+    // separately once story.diamondCup.stage reaches "done".
+    const outcome = resolveDiamondCupOutcome(story, me.name, mine.pos, res.length);
+    trust = clamp(trust + outcome.trust, 0, 100);
+    reputation = clamp(reputation + outcome.reputation, 0, 100);
+    celebrity = clamp(celebrity + outcome.celebrity, 0, 100);
+    skill = clamp(skill + outcome.skill, 0, 100);
+    story = outcome.story;
+    msgs.push({ day: st.day, text: outcome.message });
+    if (mine.pos === 1) {
+      me.wins++; me.morale = clamp(me.morale + 10, 0, 100);
+      milestones.g1Win = true; milestones.groupWin = true;
+    } else if (mine.pos > res.length - 2) {
+      me.morale = clamp(me.morale - 4, 0, 100);
+    }
+  } else if (race.isClassic) {
     // The Classics use their own diminishing-returns outcome system instead
     // of the ordinary grade-weighted trust/reputation logic below — applying
     // both would double-count.

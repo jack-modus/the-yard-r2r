@@ -34,7 +34,8 @@ export interface ClassicArcState {
 export interface DiamondCupState {
   stage: "pending" | "announced" | "fatherRevealed" | "confronted" | "horseChosen" | "scarePending" | "cleared" | "done";
   horseId: number | null;
-  day: number | null;
+  raceDay: number | null; // the Diamond Cup's own fixed day, set once announced
+  nextBeatDay: number | null; // when the next beat in this sequence fires
 }
 
 export interface Choice {

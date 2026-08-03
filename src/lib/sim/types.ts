@@ -107,6 +107,7 @@ export interface RaceCard {
   raceDay: number;
   name: string;
   isClassic?: boolean;
+  isDiamondCup?: boolean;
 }
 
 export interface CalendarRace {

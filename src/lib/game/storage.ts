@@ -1,10 +1,27 @@
 // localStorage persistence for GameState. Set<string> (usedNames) doesn't
 // survive JSON.stringify/parse directly, so it's serialized as an array.
+//
+// GameState's shape has changed incompatibly several times during
+// development (fields added/removed/renamed) — bump this key whenever that
+// happens again, so an old save is simply never read rather than crashing
+// the app on load. loadGame() also runs a light shape check as a second
+// line of defence in case a bump gets forgotten.
 import type { GameState } from "./types";
 
-const KEY = "the-yard:rags-to-riches:v1";
+const KEY = "the-yard:rags-to-riches:v2";
 
 type SerializedState = Omit<GameState, "usedNames"> & { usedNames: string[] };
+
+function looksLikeCurrentShape(parsed: unknown): parsed is SerializedState {
+  if (!parsed || typeof parsed !== "object") return false;
+  const p = parsed as Record<string, unknown>;
+  return (
+    typeof p.day === "number" &&
+    Array.isArray(p.horses) &&
+    typeof p.story === "object" && p.story !== null &&
+    typeof (p.story as Record<string, unknown>).stage === "string"
+  );
+}
 
 export function saveGame(state: GameState) {
   if (typeof window === "undefined") return;
@@ -21,7 +38,11 @@ export function loadGame(): GameState | null {
   const raw = window.localStorage.getItem(KEY);
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as SerializedState;
+    const parsed = JSON.parse(raw);
+    if (!looksLikeCurrentShape(parsed)) {
+      window.localStorage.removeItem(KEY); // stale/incompatible save — drop it, start fresh
+      return null;
+    }
     return { ...parsed, usedNames: new Set(parsed.usedNames) };
   } catch {
     return null;

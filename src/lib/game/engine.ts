@@ -47,7 +47,7 @@ export function newGame(used: Set<string>): GameState {
     messages: [
       { day: 1, text: `Tony Vincenzo arrives at ${yard.yardName}. Not a penny to his name — but a chance, and a big one.` },
     ],
-    news: null, milestones: { firstWin: false, secondHorse: false, listedWin: false, groupWin: false, g1Win: false, tier2Unlocked: false },
+    news: null, milestones: { firstWin: false, secondHorse: false, thirdHorse: false, listedWin: false, groupWin: false, g1Win: false, tier2Unlocked: false },
     ending: null,
   };
 }
@@ -61,7 +61,7 @@ export function resolveHorsePick(s: GameState, chosenIds: number[]): GameState {
     awaitingHorsePick: false,
     story: scheduleNemesisIntro(s.story, s.day),
     messages: [
-      { day: s.day, text: `Three horses walk into your string: ${chosen.map(h => h.name).join(", ")}. The other three go elsewhere. No going back now.` },
+      { day: s.day, text: `${chosen[0]?.name ?? "Your horse"} walks into the yard as your one and only. The other five go elsewhere. No going back now.` },
       ...s.messages,
     ].slice(0, 60),
   };
@@ -226,6 +226,22 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
     }
   }
 
+  // --- string grows on results, not trust: a place earns a second horse,
+  // a third career win earns a third. Applies to any race, not just Classics. ---
+  if (!milestones.secondHorse && mine.pos <= 3) {
+    milestones.secondHorse = true;
+    const h2 = makeHorse(58, st.usedNames, { age: 2, fitness: 30 });
+    horses.push(h2);
+    msgs.push({ day: st.day, text: `${yard.boss}: "That's a place finish — you've earned a second string. ${h2.name}, unraced two-year-old, decent family. Don't ruin it." A second box is yours.` });
+  }
+  const totalWins = horses.reduce((sum, h) => sum + h.wins, 0);
+  if (milestones.secondHorse && !milestones.thirdHorse && totalWins >= 3) {
+    milestones.thirdHorse = true;
+    const h3 = makeHorse(62, st.usedNames, { age: 2, fitness: 30 });
+    horses.push(h3);
+    msgs.push({ day: st.day, text: `${yard.boss}: "Three winners now — that's a proper yard building. ${h3.name}, and see what you can do with it." A third box is yours.` });
+  }
+
   // --- the handicapper's letter: the official mark only moves when the form is reviewed ---
   if (me.mark == null) {
     me.mark = OR(me);
@@ -257,7 +273,7 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
 // ---------- day advance ----------
 export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, walkPlan: CourseName | null): GameState {
   const yard = YARD;
-  let horses = s.horses.map(h => ({ ...h }));
+  const horses = s.horses.map(h => ({ ...h }));
   const msgs: { day: number; text: string }[] = [];
   let newsLine: string | null = null;
   const trust = s.trust, cash = s.cash, reputation = s.reputation, celebrity = s.celebrity;
@@ -338,9 +354,25 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
   // hidden, hardcoded training-effectiveness constant.
   const skillMult = 1 + (s.skill / 100) * 0.3;
   const ACTIVE_TRAINING: TrainingPlan[] = ["gallop", "canter", "sprints", "stalls", "school"];
+  const TRAINING_LABEL: Record<string, string> = {
+    gallop: "gallop work", canter: "canter work", sprints: "sprint work", stalls: "stalls schooling",
+    school: "schooling", easy: "an easy day", rest: "a full rest day",
+  };
+  const PRIMARY_STAT: Partial<Record<string, { key: "speed" | "stamina" | "accel" | "brk" | "balance"; label: string }>> = {
+    gallop: { key: "speed", label: "speed" }, canter: { key: "stamina", label: "stamina" },
+    sprints: { key: "accel", label: "accel" }, stalls: { key: "brk", label: "break" }, school: { key: "balance", label: "balance" },
+  };
+  const skillBefore = skill;
   let trainedActively = false;
+  // Morning report: what changed since yesterday — per user feedback, day-to-day
+  // progress was invisible unless something dramatic happened.
+  const reportLines: string[] = [];
   horses.forEach(h => {
-    if (h.injuryDays > 0) { h.injuryDays--; h.fatigue = Math.max(0, h.fatigue - 12); return; }
+    if (h.injuryDays > 0) {
+      h.injuryDays--; h.fatigue = Math.max(0, h.fatigue - 12);
+      reportLines.push(`${h.name}: on the easy list, ${h.injuryDays} day${h.injuryDays === 1 ? "" : "s"} left.`);
+      return;
+    }
     const p = walking ? "easy" : (plan[h.id] || "easy");
     if (!walking && ACTIVE_TRAINING.includes(p)) trainedActively = true;
     const gains: Record<string, Record<string, number>> = {
@@ -360,6 +392,12 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
       else (h as unknown as Record<string, number>)[k] = clamp(Math.round((((h as unknown as Record<string, number>)[k]) + v * mult * (1 - ((h as unknown as Record<string, number>)[k]) / 100) * 2) * 10) / 10, 0, 99);
     });
     if (p === "rest") h.morale = clamp(h.morale + 2, 0, 100);
+    if (!walking) {
+      const primary = PRIMARY_STAT[p];
+      reportLines.push(primary
+        ? `${h.name}: ${TRAINING_LABEL[p]} — ${primary.label} now ${Math.round(h[primary.key])}.`
+        : `${h.name}: ${TRAINING_LABEL[p]}.`);
+    }
     if (["gallop", "sprints"].includes(p) && Math.random() < 0.02 + (h.fatigue / 100) * 0.05) {
       h.injuryDays = ri(3, 9);
       msgs.push({ day: s.day, text: `${h.name} pulled up short on the gallops — ${h.injuryDays} days on the easy list.` });
@@ -370,8 +408,9 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
   if (walking) {
     mastery[walkPlan!] = clamp(mastery[walkPlan!] + 8, 0, 100);
     skill = clamp(skill + 4, 0, 100);
-    msgs.push({ day: s.day, text: `You spend the day at ${walkPlan}, walking every yard from stalls to winning post. The string has an easy day back home. Course knowledge: ${Math.round(mastery[walkPlan!])}/100.` });
+    reportLines.push(`Spent the day at ${walkPlan}, walking every yard from stalls to winning post — course knowledge now ${Math.round(mastery[walkPlan!])}/100. The string had an easy day back home.`);
   }
+  if (skill > skillBefore) reportLines.push(`Skill: +${skill - skillBefore} (now ${Math.round(skill)}/100).`);
 
   // --- passive study: +1/day, with occasional windfalls from racing people ---
   const study = s.study;
@@ -392,12 +431,13 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
   const storyTriggered = checkStoryTriggers({ ...s, horses, mastery, skill });
   if (storyTriggered) return storyTriggered;
 
-  // --- day content: quiet / news / decision ---
+  // --- day content: quiet / news / decision — decision odds raised (18%->30%)
+  // and "nothing at all" cut (22%->15%) per feedback that early game felt thin ---
   const roll = Math.random();
-  if (roll < 0.42) newsLine = pick(QUIET_DAYS);
-  else if (roll < 0.6) {
+  if (roll < 0.35) newsLine = pick(QUIET_DAYS);
+  else if (roll < 0.5) {
     newsLine = pick(NEWS_LINES(yard, Object.keys(COURSES)));
-  } else if (roll < 0.78) {
+  } else if (roll < 0.8) {
     const tm = trainingMoment({ ...s, horses });
     if (tm) queue = [tm]; else newsLine = pick(QUIET_DAYS);
   } else newsLine = null;
@@ -406,6 +446,7 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
   const myBest = horses.filter(h => h.injuryDays === 0).sort((a, b) => OR(b) - OR(a))[0];
   if (!entered && myBest && (slate.length === 0 || Math.random() < 0.35)) {
     slate = makeSlate(s.day + 1, unlockedCourses(reputation), effRating(myBest));
+    if (slate.length) reportLines.push(`New entries up: ${slate.map(r => r.name).join(", ")}.`);
   }
 
   // --- milestone: tier-2 tracks unlock once Reputation clears the bar ---
@@ -414,13 +455,7 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
     msgs.push({ day: s.day, text: `Word is getting around about you. ${yard.boss}: "You've earned a look at the bigger tracks — Ascot, York, Chester, Doncaster. Don't waste it." Entries are open at the tier-2 courses from today.` });
   }
 
-  // --- milestone: second horse, swap offers ---
-  if (milestones.firstWin && !milestones.secondHorse && trust >= 45) {
-    milestones.secondHorse = true;
-    const h2 = makeHorse(58, s.usedNames, { age: 2, fitness: 30 });
-    horses = [...horses, h2];
-    msgs.push({ day: s.day, text: `${yard.boss}: "You've earned a second string. ${h2.name} — unraced two-year-old, decent family. Don't ruin it." A second box is yours.` });
-  }
+  // --- milestone: swap offers (second/third horse are earned via race results now — see resolveRaceDay) ---
   if (trust >= 75 && horses.length >= 2 && Math.random() < 0.03) {
     const worst = [...horses].sort((a, b) => OR(a) - OR(b))[0];
     const better = makeHorse(clamp(OR(worst) + ri(10, 18), 40, 96) / 1.18, s.usedNames, { fitness: 40 });
@@ -442,11 +477,17 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
     msgs.push({ day: 1, text: `Year ${year} begins. The horses have wintered well. Bigger targets this season?` });
   }
 
-  const flashLines = [...msgs.map(m => m.text), ...(newsLine ? [newsLine] : [])];
+  // Morning report first (mechanical: training/skill/slate), then notable
+  // events (injuries, milestones), then ambient flavour — always shown, even
+  // on a day that also queues a decision: DecisionOverlay (z-31) renders over
+  // DailyFlashOverlay (z-30), so the report surfaces right after the decision
+  // is dismissed instead of being silently dropped. Per feedback that
+  // day-to-day change was otherwise invisible.
+  const flashLines = [...reportLines, ...msgs.map(m => m.text), ...(newsLine ? [newsLine] : [])];
   return {
     ...s, day, year, horses, trust, cash, reputation, celebrity, skill, mastery, slate, entered, results, milestones,
     messages: [...msgs, ...s.messages].slice(0, 60), news: newsLine, queue,
-    flash: (queue.length === 0 && flashLines.length) ? flashLines : null,
+    flash: flashLines.length ? flashLines : null,
   };
 }
 

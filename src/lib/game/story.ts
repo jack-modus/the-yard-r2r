@@ -179,8 +179,9 @@ export function newStoryState(): StoryState {
 }
 
 // Called once the horse pick resolves — schedules beat 4 (nemesis arrival).
+// Deliberately early (~day 4) — an earlier hook, per playtesting feedback.
 export function scheduleNemesisIntro(story: StoryState, day: number): StoryState {
-  return { ...story, stage: "preNemesis", nemesisIntroDay: day + ri(7, 10) };
+  return { ...story, stage: "preNemesis", nemesisIntroDay: day + ri(3, 5) };
 }
 
 // Checked early in advanceDay, after training/walking/study but before the

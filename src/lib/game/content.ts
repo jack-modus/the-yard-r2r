@@ -26,6 +26,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
   const templates: DecisionEvent[] = [
     {
       title: `${h.name} is fresh this morning`,
+      tag: "TRAINING",
       text: `Bucking and squealing on the walk out — the horse is jumping out of its skin. Let it have a proper blow-out, or keep the lid on?`,
       choices: [
         { label: "Let it stretch out", hint: "+speed · +fatigue · small strain risk", apply: st => {
@@ -39,6 +40,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
     },
     {
       title: "Stalls practice?",
+      tag: "TRAINING",
       text: `${h.name} has been slow into stride. A morning at the practice stalls could fix the break — with the usual small risk of a knock in there.`,
       choices: [
         { label: "School in the stalls", hint: "+break · small knock risk (days off)", apply: st => Math.random() < 0.1
@@ -49,14 +51,16 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
     },
     {
       title: `${yard.boss} stops by your box`,
+      tag: "BOSS",
       text: `${yard.boss} leans on the door and watches you work for a long minute. "Tell me your plan for this one." Do you talk targets or talk process?`,
       choices: [
-        { label: "Talk targets — name a race", hint: "+trust (more)", apply: st => note({ ...st, trust: clamp(st.trust + 4, 0, 100) }, `${pick(yard.praise)} — the ambition lands well. Trust grows.`) },
-        { label: "Talk process — the daily work", hint: "+trust (less)", apply: st => note({ ...st, trust: clamp(st.trust + 2, 0, 100) }, `A thoughtful answer. ${yard.boss} nods slowly and moves on.`) },
+        { label: "Talk targets — name a race", apply: st => note({ ...st, trust: clamp(st.trust + 4, 0, 100) }, `${pick(yard.praise)} — the ambition lands well. Trust grows. (Trust +4.)`) },
+        { label: "Talk process — the daily work", apply: st => note({ ...st, trust: clamp(st.trust + 2, 0, 100) }, `A thoughtful answer. ${yard.boss} nods slowly and moves on. (Trust +2.)`) },
       ],
     },
     {
       title: "Work upsides the stable star",
+      tag: "TRAINING",
       text: `The head lad offers you a lead horse for a serious piece of work. It'll build ${h.name} up — and take something out of the horse today.`,
       choices: [
         { label: "Take the work", hint: "+stamina · +fitness · +fatigue", apply: st => note(withHorse(st, h.id, x => ({ ...x, stamina: clamp(x.stamina + 2, 0, 99), fitness: clamp(x.fitness + 4, 0, 100), fatigue: clamp(x.fatigue + 10, 0, 100) })), `${h.name} is made to graft — and thrives on it.`) },
@@ -65,6 +69,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
     },
     {
       title: `A theory about ${h.name}`,
+      tag: "TRAINING",
       text: `Watching the horse move on ${h.prefGoing >= 3 ? "rain-softened" : "quick"} ground this morning, you have a hunch about its going preference. Test it with a searching piece of work?`,
       choices: [
         { label: "Test the theory", hint: "reveals going preference · +fatigue", apply: st => note(withHorse(st, h.id, x => ({ ...x, goingKnown: true, fatigue: clamp(x.fatigue + 8, 0, 100) })), `Confirmed: ${h.name} clearly wants ${["", "Good to Firm", "Good", "Good to Soft", "Soft"][h.prefGoing]} ground. Written in the notebook.`) },
@@ -73,10 +78,38 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
     },
     {
       title: "The local paper wants a word",
+      tag: "PRESS",
       text: `A reporter's on the phone chasing a line about ${h.name} for the weekend edition. ${yard.boss} leaves it to you — but insiders notice a trainer who's always chasing headlines.`,
       choices: [
-        { label: "Give them a big quote", hint: "+celebrity (more) · -reputation (small)", apply: st => note({ ...st, celebrity: clamp(st.celebrity + 6, 0, 100), reputation: clamp(st.reputation - 2, 0, 100) }, `Your quote runs under a big photo of ${h.name}. The public loves it. A couple of trainers you respect raise an eyebrow at the showmanship.`) },
-        { label: "Keep it modest, stick to the facts", hint: "+reputation (small)", apply: st => note({ ...st, reputation: clamp(st.reputation + 2, 0, 100) }, `A quiet, professional quote. Nothing anyone will remember by name — but it's the kind of answer other trainers respect.`) },
+        { label: "Give them a big quote", apply: st => note({ ...st, celebrity: clamp(st.celebrity + 6, 0, 100), reputation: clamp(st.reputation - 2, 0, 100) }, `Your quote runs under a big photo of ${h.name}. The public loves it. A couple of trainers you respect raise an eyebrow at the showmanship. (Celebrity +6, Reputation -2.)`) },
+        { label: "Keep it modest, stick to the facts", apply: st => note({ ...st, reputation: clamp(st.reputation + 2, 0, 100) }, `A quiet, professional quote. Nothing anyone will remember by name — but it's the kind of answer other trainers respect. (Reputation +2.)`) },
+      ],
+    },
+    {
+      title: "A tip, for what it's worth",
+      tag: "YARD",
+      text: `An old jockey's agent corners you at the sales ground, half a pint deep, keen to share a theory about ${h.name}. Some of it's nonsense. Some of it might not be.`,
+      choices: [
+        { label: "Take it seriously", apply: st => note(withHorse(st, h.id, x => ({ ...x, morale: clamp(x.morale + 4, 0, 100) })), `You nod along and file it away. ${h.name} seems to have picked up on the extra attention — a touch brighter in itself this week.`) },
+        { label: "Smile and forget it", apply: st => note(st, `Probably wise. Half the tips in this game are just noise dressed up as wisdom.`) },
+      ],
+    },
+    {
+      title: "Another trainer, over the fence",
+      tag: "YARD",
+      text: `A trainer from a neighbouring yard leans on the rail while your string cools off, in the mood to talk shop. "How's yours shaping up, then?" It's the kind of question that's really an invitation to compare notes.`,
+      choices: [
+        { label: "Swap notes openly", apply: st => note({ ...st, reputation: clamp(st.reputation + 1, 0, 100) }, `You talk plainly, and so does she. Not every conversation in this game needs to be a negotiation. (Reputation +1.)`) },
+        { label: "Keep your cards close", apply: st => note(st, `You keep it vague. She takes the hint and the conversation moves on to the weather, as these things do.`) },
+      ],
+    },
+    {
+      title: "A camera crew in the yard",
+      tag: "PRESS",
+      text: `A regional TV crew turns up unannounced, doing a piece on "the next generation of British racing" — someone in the press office clearly gave them your name. They want thirty seconds, on camera, right now.`,
+      choices: [
+        { label: "Do the interview", apply: st => note({ ...st, celebrity: clamp(st.celebrity + 5, 0, 100) }, `You give them something usable. It airs on the local news that evening, ${h.name} getting a two-second cutaway shot of its own. (Celebrity +5.)`) },
+        { label: "Point them at the head lad instead", apply: st => note(st, `Ray handles it far better than you would have. The crew leaves happy, and nobody outside the yard ever knows you dodged it.`) },
       ],
     },
   ];

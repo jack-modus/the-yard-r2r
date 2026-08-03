@@ -16,6 +16,7 @@ export interface Message {
 export interface Milestones {
   firstWin: boolean;
   secondHorse: boolean;
+  thirdHorse: boolean;
   listedWin: boolean;
   groupWin: boolean;
   g1Win: boolean;
@@ -44,10 +45,16 @@ export interface Choice {
   apply: (st: GameState) => GameState;
 }
 
+// `tag` is optional, cosmetic-only — a short category label (PRESS/BOSS/
+// RIVAL/TRAINING/FAMILY) the UI uses to give decisions a bit of visual
+// variety instead of every overlay looking identical.
+export type DecisionTag = "PRESS" | "BOSS" | "RIVAL" | "TRAINING" | "FAMILY" | "YARD";
+
 export interface DecisionEvent {
   title: string;
   text: string;
   choices: Choice[];
+  tag?: DecisionTag;
 }
 
 export interface LiveRace {

@@ -200,13 +200,17 @@ export function makeClassicDoubts(horseName: string, raceName: string): Decision
   };
 }
 
-export function classicOutcomeMessage(outcome: ClassicOutcome, raceName: string, horseName: string): string {
+export function classicOutcomeMessage(outcome: Exclude<ClassicOutcome, "scratched">, raceName: string, horseName: string): string {
   switch (outcome) {
     case "win": return `${horseName} WINS the ${raceName}! Pandemonium in the stands — this is the kind of day people remember for years.`;
     case "place": return `${horseName} runs a huge race in the ${raceName}, right there without quite getting up. Nobody's disappointed with that.`;
     case "okay": return `${horseName} runs its race in the ${raceName} without ever really threatening — competitive, no more than that.`;
     case "tank": return `${horseName} never gets competitive in the ${raceName}. A day to forget, on the biggest stage there is.`;
   }
+}
+
+export function classicScratchedMessage(raceName: string, horseName: string): string {
+  return `${horseName} is scratched from the ${raceName} — not fit to take its chance. The biggest race of the season so far, and it slips by without you. No time to dwell on it; the next one comes round soon enough.`;
 }
 
 // Occasional press callback referencing the most recent Classic result —
@@ -219,6 +223,7 @@ export function makeClassicCallback(lastResult: { name: string; outcome: Classic
       lastResult.outcome === "win" ? "your win there still gets mentioned whenever your name comes up"
       : lastResult.outcome === "place" ? "that near-miss still comes up in conversation"
       : lastResult.outcome === "okay" ? "even a quiet run there still gets a mention these days"
+      : lastResult.outcome === "scratched" ? "the fact you never even got a run still puzzles people"
       : "even the bad days get raked over, apparently"
     }.`,
     choices: [
@@ -317,7 +322,7 @@ export function diamondCupClearFlash(horseName: string): string[] {
   ];
 }
 
-export function diamondCupOutcomeMessage(outcome: ClassicOutcome, horseName: string): string {
+export function diamondCupOutcomeMessage(outcome: Exclude<ClassicOutcome, "scratched">, horseName: string): string {
   switch (outcome) {
     case "win": return `${horseName} WINS THE DIAMOND CUP! The biggest prize in the sport, and it's yours. Whatever happens next, this day is permanent.`;
     case "place": return `${horseName} goes down fighting in the Diamond Cup, beaten but never disgraced, in the biggest field of the year.`;

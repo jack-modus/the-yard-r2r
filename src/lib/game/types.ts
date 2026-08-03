@@ -22,7 +22,7 @@ export interface Milestones {
   tier2Unlocked: boolean;
 }
 
-export type ClassicOutcome = "win" | "place" | "okay" | "tank";
+export type ClassicOutcome = "win" | "place" | "okay" | "tank" | "scratched";
 
 export interface ClassicArcState {
   stage: "pending" | "horseChosen";

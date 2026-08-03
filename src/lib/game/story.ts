@@ -1,7 +1,7 @@
 // Act 1 scripted-narrative state machine and nemesis (Martin McLean)
 // mechanics. Orchestration only — the actual beat dialogue lives in
 // storyContent.ts. See CLAUDE.md / the approved plan for the full design.
-import { CALENDAR, OR, makeHorse, ri } from "@/lib/sim";
+import { CALENDAR, OR, YARD, makeHorse, ri } from "@/lib/sim";
 import type { FieldEntry, Horse, ScoredEntry } from "@/lib/sim";
 import {
   BEAT7_BRIDGES_ADVICE, BEAT_FATHER_BACKS_MCLEAN, BEAT_FATHER_CONFRONTED, DIAMOND_CUP_ANNOUNCEMENT,
@@ -10,6 +10,32 @@ import {
 } from "./storyContent";
 import { unlockedCourses } from "./tracks";
 import type { ClassicArcState, ClassicOutcome, GameState, StoryState } from "./types";
+
+// Trust is the primary gate for a contract extension (user's own framing);
+// high Reputation or Celebrity without enough Trust reads as "someone else
+// wants you" rather than "Bridges keeps you" — a different, not worse,
+// ending.
+const CONTRACT_TRUST_THRESHOLD = 60;
+const POACHED_THRESHOLD = 50;
+
+export function computeEnding(trust: number, reputation: number, celebrity: number): { verdict: "contract" | "poached" | "released"; text: string } {
+  if (trust >= CONTRACT_TRUST_THRESHOLD) {
+    return {
+      verdict: "contract",
+      text: `${YARD.boss} doesn't make a show of it. "You've more than earned another year here — long as you're still keen." It's not effusive. It's exactly the kind of trust you set out to earn.`,
+    };
+  }
+  if (reputation >= POACHED_THRESHOLD || celebrity >= POACHED_THRESHOLD) {
+    return {
+      verdict: "poached",
+      text: `${YARD.boss} is polite about it, which somehow stings more than anger would. But the phone's already ringing — Marina Delacroix-Hale's yard has heard plenty, and they're not shy about saying so. A different box, a different name on the gate. The story continues, just not here.`,
+    };
+  }
+  return {
+    verdict: "released",
+    text: `${YARD.boss} shakes your hand. "It didn't come together this time. That's racing." No contract, no cushion — just the notebook full of what you learned, and whatever you do with it next.`,
+  };
+}
 
 export const NEMESIS_TRAINER = "Martin McLean";
 export const NEMESIS_YARD = "McLean Racing, Middleham";
@@ -30,17 +56,49 @@ export function scheduleClassicArc(index: number, fromDay: number): ClassicArcSt
   return { stage: "pending", horseId: null, horseChoiceDay, doubtsDay };
 }
 
+// Called when a horse declared for a Classic gets scratched (injured before
+// race day) — a real Classic is a fixed calendar date, not something you can
+// re-run later, so this counts as a missed opportunity (no stat penalty,
+// just bad luck) and moves straight on to the next one. Without this, the
+// arc would stall forever: classicArc.stage stays "horseChosen" and nothing
+// else ever re-triggers it — caught via scripted-playthrough testing, not
+// tsc/lint, same as the Act 1 unc-cleared-trigger bug.
+export function skipClassic(story: StoryState, day: number): StoryState {
+  const index = story.classicIndex;
+  const name = CALENDAR[index]?.name ?? "the Classic";
+  const nextIndex = index + 1;
+  return {
+    ...story,
+    classicIndex: nextIndex,
+    classicResults: [...story.classicResults, { name, outcome: "scratched" }],
+    classicArc: scheduleClassicArc(nextIndex, day),
+  };
+}
+
+// Same idea for the Diamond Cup, but since it's scripted-only (no fixed
+// CALENDAR date), a scratch just pushes the race back and lets the player
+// pick again rather than skipping the finale entirely.
+export function rescheduleDiamondCup(story: StoryState, day: number): StoryState {
+  return { ...story, diamondCup: { stage: "confronted", horseId: null, raceDay: day + 15, nextBeatDay: null } };
+}
+
 // Diminishing returns per Classic index (1st→5th) — user's own framing:
 // "the same thing happens for each classic except the impact is less each time".
 const CLASSIC_DIMINISH = [1, 0.7, 0.5, 0.35, 0.25];
-const CLASSIC_DELTAS: Record<ClassicOutcome, { trust: number; reputation: number; celebrity: number; skill: number }> = {
+// "scratched" is deliberately excluded here — it's never returned by
+// classifyClassicOutcome (only reached via skipClassic/rescheduleDiamondCup,
+// which don't apply stat deltas at all), so these tables don't need an entry
+// for it. Keeps the type system honest about which outcomes actually reach
+// resolveClassicOutcome/resolveDiamondCupOutcome.
+type RaceOutcome = Exclude<ClassicOutcome, "scratched">;
+const CLASSIC_DELTAS: Record<RaceOutcome, { trust: number; reputation: number; celebrity: number; skill: number }> = {
   win: { trust: 15, reputation: 20, celebrity: 8, skill: 5 },
   place: { trust: 8, reputation: 10, celebrity: 3, skill: 3 },
   okay: { trust: 2, reputation: 3, celebrity: 0, skill: 2 },
   tank: { trust: -8, reputation: -10, celebrity: -2, skill: 1 },
 };
 
-export function classifyClassicOutcome(pos: number, fieldSize: number): ClassicOutcome {
+export function classifyClassicOutcome(pos: number, fieldSize: number): RaceOutcome {
   if (pos === 1) return "win";
   if (pos <= 3) return "place";
   if (pos <= Math.ceil(fieldSize / 2)) return "okay";
@@ -81,7 +139,7 @@ export function resolveClassicOutcome(
 // The Diamond Cup is a one-off — no diminishing-returns scaling, and the
 // deltas are the biggest in the game, matching its "biggest prize in the
 // sport" framing. Same story-freshness caveat as resolveClassicOutcome.
-const DIAMOND_CUP_DELTAS: Record<ClassicOutcome, { trust: number; reputation: number; celebrity: number; skill: number }> = {
+const DIAMOND_CUP_DELTAS: Record<RaceOutcome, { trust: number; reputation: number; celebrity: number; skill: number }> = {
   win: { trust: 25, reputation: 30, celebrity: 15, skill: 8 },
   place: { trust: 12, reputation: 15, celebrity: 6, skill: 4 },
   okay: { trust: 3, reputation: 5, celebrity: 1, skill: 2 },

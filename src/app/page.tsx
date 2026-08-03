@@ -9,6 +9,7 @@ import { loadGame, saveGame } from "@/lib/game/storage";
 import type { GameState, TrainingPlan } from "@/lib/game/types";
 import { IntroScreen } from "@/components/intro/IntroScreen";
 import { HorsePickScreen } from "@/components/intro/HorsePickScreen";
+import { EndingScreen } from "@/components/game/EndingScreen";
 import { Header } from "@/components/game/Header";
 import { DailyFlashOverlay } from "@/components/game/DailyFlashOverlay";
 import { DecisionOverlay } from "@/components/game/DecisionOverlay";
@@ -74,6 +75,10 @@ export default function Home() {
         )}
       </div>
     );
+  }
+
+  if (g.ending && !g.liveRace) {
+    return <EndingScreen g={g} />;
   }
 
   const yard = YARD;

@@ -12,11 +12,11 @@ import type { CourseName, Grade, RaceCard } from "@/lib/sim";
 import type { Tactic } from "@/lib/sim/commentary";
 import { NEWS_LINES, QUIET_DAYS, trainingMoment } from "./content";
 import {
-  BEAT2_BRIDGES_OFFICE, BEAT5_REPORTER_PRE_RACE, BEAT6_MCLEAN_TAUNT,
+  BEAT2_BRIDGES_OFFICE, BEAT5_REPORTER_PRE_RACE, BEAT6_MCLEAN_TAUNT, classicScratchedMessage,
 } from "./storyContent";
 import {
-  checkStoryTriggers, ensureNemesisInField, forcePosition, newStoryState, resolveClassicOutcome,
-  resolveDiamondCupOutcome, scheduleNemesisIntro,
+  checkStoryTriggers, computeEnding, ensureNemesisInField, forcePosition, newStoryState, rescheduleDiamondCup,
+  resolveClassicOutcome, resolveDiamondCupOutcome, scheduleNemesisIntro, skipClassic,
 } from "./story";
 import { note } from "./stateUtils";
 import { unlockedCourses } from "./tracks";
@@ -81,6 +81,7 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
   const milestones = { ...st.milestones };
   let results = st.results;
   let story = st.story;
+  let ending = st.ending;
   let queueExtra: GameState["queue"] = [];
 
   // tactics modifier: plays to different stats, with hold-up carrying traffic risk
@@ -164,14 +165,14 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
   }
   if (race.isDiamondCup) {
     // The finale — biggest deltas in the game, no diminishing returns
-    // (it only ever happens once). Ending computation is wired in
-    // separately once story.diamondCup.stage reaches "done".
+    // (it only ever happens once). Ending computed immediately after,
+    // using the just-updated trust/reputation/celebrity.
     const outcome = resolveDiamondCupOutcome(story, me.name, mine.pos, res.length);
     trust = clamp(trust + outcome.trust, 0, 100);
     reputation = clamp(reputation + outcome.reputation, 0, 100);
     celebrity = clamp(celebrity + outcome.celebrity, 0, 100);
     skill = clamp(skill + outcome.skill, 0, 100);
-    story = outcome.story;
+    story = { ...outcome.story, stage: "ended" };
     msgs.push({ day: st.day, text: outcome.message });
     if (mine.pos === 1) {
       me.wins++; me.morale = clamp(me.morale + 10, 0, 100);
@@ -179,6 +180,8 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
     } else if (mine.pos > res.length - 2) {
       me.morale = clamp(me.morale - 4, 0, 100);
     }
+    ending = computeEnding(trust, reputation, celebrity);
+    msgs.push({ day: st.day, text: ending.text });
   } else if (race.isClassic) {
     // The Classics use their own diminishing-returns outcome system instead
     // of the ordinary grade-weighted trust/reputation logic below — applying
@@ -244,7 +247,7 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
   }
   results = [{ race, res: res.slice(0, 6), mine, cmt }, ...results].slice(0, 30);
   return {
-    ...st, horses, roster, trust, cash, reputation, celebrity, skill, mastery, milestones, results, entered: null, story,
+    ...st, horses, roster, trust, cash, reputation, celebrity, skill, mastery, milestones, results, entered: null, story, ending,
     queue: [...st.queue, ...queueExtra],
     liveRace: { raceName: race.name, beats: makeBeats(race, res, mine, tactic), idx: 0 },
     messages: [...msgs, ...st.messages].slice(0, 60),
@@ -291,6 +294,21 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
   if (entered && entered.raceDay <= s.day) {
     const me = horses.find(h => h.id === entered!.horseId);
     if (!me || me.injuryDays > 0) {
+      // A scratched Classic/Diamond Cup can't just vanish — nothing else
+      // ever re-triggers that arc otherwise, permanently stalling Act 2/3.
+      // See skipClassic/rescheduleDiamondCup in story.ts.
+      if (entered.isClassic) {
+        return {
+          ...s, entered: null, story: skipClassic(s.story, s.day),
+          messages: [{ day: s.day, text: classicScratchedMessage(entered.name.replace(/\s*\([^)]*\)$/, ""), me?.name ?? "Your runner") }, ...s.messages].slice(0, 60),
+        };
+      }
+      if (entered.isDiamondCup) {
+        return {
+          ...s, entered: null, story: rescheduleDiamondCup(s.story, s.day),
+          messages: [{ day: s.day, text: `${me ? me.name : "Your runner"} is scratched from the Diamond Cup — not fit to take its chance. Bridges is already talking about another entry.` }, ...s.messages].slice(0, 60),
+        };
+      }
       return { ...s, entered: null, messages: [{ day: s.day, text: `${me ? me.name : "Your runner"} is scratched — not fit to take its chance.` }, ...s.messages].slice(0, 60) };
     }
     const nemesisPreRaceLine = (s.story.forceNemesisNextRace && s.story.stage === "secondRacePending")

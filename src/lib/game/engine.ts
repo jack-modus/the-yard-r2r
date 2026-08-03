@@ -1,49 +1,65 @@
 // Game state machine: new game, day advance, race resolution, decisions.
 // Extracted and typed from reference/rags-to-riches-v6.jsx — the logic itself
-// (formulas, probabilities, ordering of checks) is unchanged from the prototype.
+// (formulas, probabilities, ordering of checks) is unchanged from the prototype,
+// aside from the Act 1 scripted-narrative hooks added in story.ts.
 import {
   CMT_ALSO, CMT_PLACE, CMT_WIN,
-  COURSES, GEAR, GOINGS, OR, PRIZE, TIER1_COURSES, TIER2_COURSES, YARD,
-  clamp, drawField, effRating, makeBeats, makeHorse, makeRagsHorse, makeRoster, makeSlate,
+  COURSES, GEAR, GOINGS, OR, PRIZE, YARD,
+  clamp, drawField, effRating, makeBeats, makeCandidateHorses, makeHorse, makeRoster, makeSlate,
   pick, ri, runRace,
 } from "@/lib/sim";
 import type { CourseName, Grade, RaceCard } from "@/lib/sim";
 import type { Tactic } from "@/lib/sim/commentary";
 import { NEWS_LINES, QUIET_DAYS, trainingMoment } from "./content";
+import {
+  BEAT2_BRIDGES_OFFICE, BEAT5_REPORTER_PRE_RACE, BEAT6_MCLEAN_TAUNT,
+} from "./storyContent";
+import {
+  checkStoryTriggers, ensureNemesisInField, forcePosition, newStoryState, scheduleNemesisIntro,
+} from "./story";
 import { note } from "./stateUtils";
+import { unlockedCourses } from "./tracks";
 import type { EnteredRace, GameState, TrainingPlan } from "./types";
 
-// Reputation threshold that unlocks tier-2 courses (Ascot, Doncaster, York,
-// Chester). See CLAUDE.md "The four metrics" for the full reputation design.
-export const REPUTATION_TIER2_UNLOCK = 35;
-
-export function unlockedCourses(reputation: number): CourseName[] {
-  return reputation >= REPUTATION_TIER2_UNLOCK ? [...TIER1_COURSES, ...TIER2_COURSES] : TIER1_COURSES;
-}
+export { REPUTATION_TIER2_UNLOCK, unlockedCourses } from "./tracks";
 
 // How much a result at each grade moves Reputation — a G1 counts vastly
 // more than a Class 6, unlike Trust which doesn't care about grade at all.
 const GRADE_WEIGHT: Record<string, number> = { G1: 18, G2: 13, G3: 9, L: 6, "3": 4, "4": 3, "5": 2, "6": 1 };
 const gradeWeight = (grade: Grade) => GRADE_WEIGHT[String(grade)] ?? 1;
 
-export function newGame(playerName: string, used: Set<string>): GameState {
+const PLAYER_NAME = "Tony Vincenzo";
+
+export function newGame(used: Set<string>): GameState {
   const yard = YARD;
-  const rags = makeRagsHorse(used);
   const mastery = {} as Record<CourseName, number>;
   (Object.keys(COURSES) as CourseName[]).forEach(c => { mastery[c] = yard.tracks.includes(c) ? 10 : 0; });
-  const name = (playerName || "").trim() || "The Apprentice";
   return {
-    playerName: name,
+    playerName: PLAYER_NAME,
     day: 1, year: 1, cash: 500, trust: 20, reputation: 10, celebrity: 0, skill: 0,
-    horses: [rags], usedNames: used, mastery, roster: makeRoster(used),
-    slate: [], entered: null, results: [], queue: [], flash: null, liveRace: null, study: null,
+    story: newStoryState(), awaitingHorsePick: false, horseCandidates: makeCandidateHorses(used, 6),
+    horses: [], usedNames: used, mastery, roster: makeRoster(used),
+    slate: [], entered: null, results: [], queue: [BEAT2_BRIDGES_OFFICE], flash: null, liveRace: null, study: null,
     messages: [
-      { day: 1, text: yard.greeting((playerName || "").trim() || "kid") },
-      { day: 1, text: `The horse in question: ${rags.name}. ${rags.colour} ${rags.sex}, ${rags.age}yo, by ${rags.sire} out of ${rags.dam}. The stats sheet is grim reading — but something about the way it moves makes you look twice.` },
-      { day: 1, text: `Your yard's tracks to start: ${yard.tracks.join(", ")}. Walk them, race them, learn them — course knowledge is a real edge in this game, as in racing. Prove yourself here and the bigger tracks will open up.` },
+      { day: 1, text: `Tony Vincenzo arrives at ${yard.yardName}. Not a penny to his name — but a chance, and a big one.` },
     ],
     news: null, milestones: { firstWin: false, secondHorse: false, listedWin: false, groupWin: false, g1Win: false, tier2Unlocked: false },
     epilogue: false,
+  };
+}
+
+export function resolveHorsePick(s: GameState, chosenIds: number[]): GameState {
+  const chosen = (s.horseCandidates || []).filter(h => chosenIds.includes(h.id));
+  return {
+    ...s,
+    horses: chosen,
+    horseCandidates: null,
+    awaitingHorsePick: false,
+    story: scheduleNemesisIntro(s.story, s.day),
+    messages: [
+      { day: s.day, text: `Three horses walk into your string: ${chosen.map(h => h.name).join(", ")}. The other three go elsewhere. No going back now.` },
+      ...s.messages,
+    ].slice(0, 60),
   };
 }
 
@@ -61,6 +77,8 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
   const milestones = { ...st.milestones };
   let epilogue = st.epilogue;
   let results = st.results;
+  let story = st.story;
+  let queueExtra: GameState["queue"] = [];
 
   // tactics modifier: plays to different stats, with hold-up carrying traffic risk
   let expMod = 1;
@@ -74,17 +92,48 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
     }
   }
 
-  const { entries: rivals, usedIds: rivalIds } = drawField(st.roster, race, new Set(), st.usedNames);
+  const { entries: rivalsDrawn } = drawField(st.roster, race, new Set(), st.usedNames);
+  const nemesisHorse = story.nemesisHorseId != null ? st.roster.find(h => h.id === story.nemesisHorseId) : undefined;
+  const forcingNemesis = !!(story.forceNemesisNextRace && nemesisHorse);
+  const rivals = forcingNemesis ? ensureNemesisInField(rivalsDrawn, nemesisHorse!) : rivalsDrawn;
   const field = [...rivals, { horse: me, jkSkill: yard.jockey.skill, trainerName: yard.yardName, silk: "#14100a", player: true, expMod }];
-  const res = runRace(race, field, mastery);
+  let res = runRace(race, field, mastery);
+  if (forcingNemesis && story.scriptedFirstRaceLoss) res = forcePosition(res, nemesisHorse!.id, 1);
   const mine = res.find(r => r.player)!;
-  const rivalIdSet = new Set(rivalIds);
+
+  const rivalIdSet = new Set(rivals.map(r => r.horse.id));
   const roster = st.roster.map(h => {
     if (!rivalIdSet.has(h.id)) return h;
     const r = res.find(x => x.horse.id === h.id);
     if (!r) return h;
     return { ...h, runs: h.runs + 1, wins: h.wins + (r.pos === 1 ? 1 : 0), form: [r.pos > 9 ? 0 : r.pos, ...h.form].slice(0, 6) };
   });
+
+  if (forcingNemesis) {
+    const nemesisResult = res.find(r => r.horse.id === nemesisHorse!.id)!;
+    const nemesisWon = nemesisResult.pos < mine.pos;
+    const headToHead = {
+      wins: story.headToHead.wins + (nemesisWon ? 0 : 1),
+      losses: story.headToHead.losses + (nemesisWon ? 1 : 0),
+    };
+    if (story.stage === "nemesisPending") {
+      msgs.push({ day: st.day, text: `McLean's ${nemesisHorse!.name} gets the better of you today — exactly as he promised in the papers.` });
+      queueExtra = [BEAT6_MCLEAN_TAUNT];
+      story = {
+        ...story, headToHead, stage: "preSecondRace", forceNemesisNextRace: false, scriptedFirstRaceLoss: false,
+        bridgesAdviceDay: st.day + ri(12, 18), allyTrainerDay: st.day + ri(30, 40), secondRaceDay: st.day + ri(110, 130),
+      };
+    } else if (story.stage === "secondRacePending") {
+      msgs.push({
+        day: st.day,
+        text: nemesisWon
+          ? `McLean's ${nemesisHorse!.name} just gets up again. No press stunt this time, no excuses either — he was simply the better horse today.`
+          : `${me.name} gets past McLean's ${nemesisHorse!.name} fair and square this time. No forced headline needed — you earned that one.`,
+      });
+      story = { ...story, headToHead, stage: "ongoing", forceNemesisNextRace: false };
+    }
+  }
+
   me.runs++; me.fatigue = clamp(me.fatigue + 26, 0, 100); me.fitness = clamp(me.fitness + 3, 0, 100);
   mastery[race.course] = clamp(mastery[race.course] + 6, 0, 100);
   const prize = PRIZE[race.grade][mine.pos - 1] || 0;
@@ -148,7 +197,8 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
   }
   results = [{ race, res: res.slice(0, 6), mine, cmt }, ...results].slice(0, 30);
   return {
-    ...st, horses, roster, trust, cash, reputation, celebrity, skill, mastery, milestones, epilogue, results, entered: null,
+    ...st, horses, roster, trust, cash, reputation, celebrity, skill, mastery, milestones, epilogue, results, entered: null, story,
+    queue: [...st.queue, ...queueExtra],
     liveRace: { raceName: race.name, beats: makeBeats(race, res, mine, tactic), idx: 0 },
     messages: [...msgs, ...st.messages].slice(0, 60),
   };
@@ -197,17 +247,22 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
     if (!me || me.injuryDays > 0) {
       return { ...s, entered: null, messages: [{ day: s.day, text: `${me ? me.name : "Your runner"} is scratched — not fit to take its chance.` }, ...s.messages].slice(0, 60) };
     }
-    return {
-      ...s, queue: [{
-        title: "Riding instructions",
-        text: `${yard.jockey.name} legs up in the parade ring before the ${entered.name}. "How do you want ${me.name} ridden?"`,
-        choices: [
-          { label: `Break sharp and make the running (plays to break: ${Math.round(me.brk)})`, apply: st => resolveRaceDay(st, "front") },
-          { label: `Settle just off the pace (plays to temperament: ${Math.round(me.temperament)})`, apply: st => resolveRaceDay(st, "stalk") },
-          { label: `Hold up for one late run (plays to accel: ${Math.round(me.accel)}, traffic risk)`, apply: st => resolveRaceDay(st, "hold") },
-        ],
-      }],
+    const nemesisPreRaceLine = (s.story.forceNemesisNextRace && s.story.stage === "secondRacePending")
+      ? ` McLean's already at it in the press: "Should be a good renewal this year — might even be competitive."`
+      : "";
+    const tacticsEvent: GameState["queue"][number] = {
+      title: "Riding instructions",
+      text: `${yard.jockey.name} legs up in the parade ring before the ${entered.name}. "How do you want ${me.name} ridden?"${nemesisPreRaceLine}`,
+      choices: [
+        { label: `Break sharp and make the running (plays to break: ${Math.round(me.brk)})`, apply: st => resolveRaceDay(st, "front") },
+        { label: `Settle just off the pace (plays to temperament: ${Math.round(me.temperament)})`, apply: st => resolveRaceDay(st, "stalk") },
+        { label: `Hold up for one late run (plays to accel: ${Math.round(me.accel)}, traffic risk)`, apply: st => resolveRaceDay(st, "hold") },
+      ],
     };
+    if (s.story.forceNemesisNextRace && s.story.stage === "nemesisPending") {
+      return { ...s, queue: [BEAT5_REPORTER_PRE_RACE, tacticsEvent] };
+    }
+    return { ...s, queue: [tacticsEvent] };
   }
 
   // --- course walk: takes your whole day, so the string just ticks over ---
@@ -269,6 +324,10 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
     }
   }
 
+  // --- scripted Act 1 story beats take priority over the normal random roll ---
+  const storyTriggered = checkStoryTriggers({ ...s, horses, mastery, skill });
+  if (storyTriggered) return storyTriggered;
+
   // --- day content: quiet / news / decision ---
   const roll = Math.random();
   if (roll < 0.42) newsLine = pick(QUIET_DAYS);
@@ -286,7 +345,7 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
   }
 
   // --- milestone: tier-2 tracks unlock once Reputation clears the bar ---
-  if (!milestones.tier2Unlocked && reputation >= REPUTATION_TIER2_UNLOCK) {
+  if (!milestones.tier2Unlocked && reputation >= 35) {
     milestones.tier2Unlocked = true;
     msgs.push({ day: s.day, text: `Word is getting around about you. ${yard.boss}: "You've earned a look at the bigger tracks — Ascot, York, Chester, Doncaster. Don't waste it." Entries are open at the tier-2 courses from today.` });
   }

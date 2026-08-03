@@ -49,11 +49,33 @@ export interface RaceResultEntry {
 
 export type TrainingPlan = "gallop" | "canter" | "sprints" | "stalls" | "school" | "easy" | "rest";
 
+// Act 1 scripted-narrative state — see lib/game/story.ts. `stage` values
+// "yard" and "horsePick" are the only ones needing special full-screen
+// treatment (no tabs yet, no horses to manage); everything from
+// "preNemesis" onward fires through the normal tabbed shell using the
+// existing DecisionOverlay/DailyFlashOverlay, same as ordinary content.
+export interface StoryState {
+  stage: "yard" | "horsePick" | "preNemesis" | "nemesisPending"
+    | "preSecondRace" | "secondRacePending" | "ongoing";
+  nemesisHorseId: number | null;
+  nemesisIntroDay: number | null;
+  bridgesAdviceDay: number | null;
+  allyTrainerDay: number | null;
+  secondRaceDay: number | null;
+  forceNemesisNextRace: boolean;
+  scriptedFirstRaceLoss: boolean;
+  headToHead: { wins: number; losses: number };
+}
+
 export interface GameState {
   playerName: string;
   day: number;
   year: number;
   cash: number;
+
+  story: StoryState;
+  awaitingHorsePick: boolean;
+  horseCandidates: Horse[] | null;
 
   // The four metrics — see CLAUDE.md "The four metrics" for the full design.
   trust: number; // the boss's private opinion of you — movable by things other than results

@@ -27,13 +27,21 @@ export function makeHorse(q: number, used: Set<string>, opts: { age?: number; fi
   };
 }
 
-// The rags horse: modest numbers, one hidden redeeming quality.
-export function makeRagsHorse(used: Set<string>): Horse {
-  const h = makeHorse(46, used, { age: 3, fitness: 25 });
-  const gift = pick(["balance", "brk", "temperament", "accel"] as const);
-  h[gift] = clamp(h[gift] + ri(18, 26), 20, 92);
-  h.quirk = { stat: gift, revealed: false };
-  return h;
+// The six candidates Bridges offers at the start of the game — modest
+// numbers across the board, each with an independent chance of one hidden
+// redeeming quality. Stats are fully visible when picking; quirks stay
+// hidden until revealed through racing, same as before — an honest blind
+// choice, not a min-max puzzle.
+export function makeCandidateHorses(used: Set<string>, n = 6): Horse[] {
+  return Array.from({ length: n }, () => {
+    const h = makeHorse(ri(40, 60), used, { age: ri(2, 4), fitness: ri(20, 35) });
+    if (Math.random() < 0.4) {
+      const gift = pick(["balance", "brk", "temperament", "accel"] as const);
+      h[gift] = clamp(h[gift] + ri(18, 26), 20, 92);
+      h.quirk = { stat: gift, revealed: false };
+    }
+    return h;
+  });
 }
 
 export const OR = (h: Horse) =>

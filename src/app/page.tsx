@@ -3,11 +3,12 @@ import { useEffect, useState } from "react";
 import { YARD } from "@/lib/sim";
 import type { CourseName, GearId, RaceCard } from "@/lib/sim";
 import {
-  advanceDay, chooseDecision as engineChooseDecision, enterRace as engineEnterRace, newGame,
+  advanceDay, chooseDecision as engineChooseDecision, enterRace as engineEnterRace, newGame, resolveHorsePick,
 } from "@/lib/game/engine";
 import { loadGame, saveGame } from "@/lib/game/storage";
 import type { GameState, TrainingPlan } from "@/lib/game/types";
 import { IntroScreen } from "@/components/intro/IntroScreen";
+import { HorsePickScreen } from "@/components/intro/HorsePickScreen";
 import { Header } from "@/components/game/Header";
 import { EpilogueBanner } from "@/components/game/EpilogueBanner";
 import { DailyFlashOverlay } from "@/components/game/DailyFlashOverlay";
@@ -49,12 +50,30 @@ export default function Home() {
   if (!loaded) return null;
 
   if (!g) {
+    return <IntroScreen onStart={() => setG(newGame(new Set<string>()))} />;
+  }
+
+  if (g.awaitingHorsePick) {
     return (
-      <IntroScreen
-        onStart={(name) => {
-          setG(newGame(name, new Set<string>()));
-        }}
+      <HorsePickScreen
+        candidates={g.horseCandidates ?? []}
+        onConfirm={chosenIds => setG(s => (s ? resolveHorsePick(s, chosenIds) : s))}
       />
+    );
+  }
+
+  if (g.story.stage === "yard") {
+    const introDecision = g.queue[0] || null;
+    return (
+      <div className="min-h-screen bg-ink-950">
+        <div className={`${COLUMN} font-diary text-[#eee6f2] px-4 pt-16`}>
+          <h1 className="text-[22px] text-gold-300 [font-variant:small-caps] mb-1">The Yard</h1>
+          <div className="text-[13px] text-muted italic">Rags to Riches</div>
+        </div>
+        {introDecision && (
+          <DecisionOverlay decision={introDecision} onChoose={i => setG(s => (s ? engineChooseDecision(s, i) : s))} />
+        )}
+      </div>
     );
   }
 

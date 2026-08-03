@@ -104,10 +104,12 @@ export function makeSlate(day: number, homeTracks: CourseName[], horseOR: number
   return options;
 }
 
-// Frank Berrow and Sonny Okafor were two of the original three boss
-// personas before the single-trainer redesign — repurposed here as rival
-// trainers rather than discarded, so their writing still surfaces in results.
-export const RIVAL_TRAINERS = ["W. Haggerty", "A. Balding-Rowe", "J. Gosforth", "C. Appleford", "R. Varley", "K. Burke-Staunton", "E. Walkden", "H. Palmer-Reed", "Frank Berrow", "Sonny Okafor"];
+// Frank Berrow, Sonny Okafor, and Marina Delacroix-Hale are all previous
+// passes' single-trainer personas — repurposed here as rival trainers rather
+// than discarded, so their writing still surfaces in results. Martin McLean
+// is deliberately NOT in this pool: he's a persistent nemesis tied to one
+// specific horse, handled directly in lib/game/story.ts.
+export const RIVAL_TRAINERS = ["W. Haggerty", "A. Balding-Rowe", "J. Gosforth", "C. Appleford", "R. Varley", "K. Burke-Staunton", "E. Walkden", "H. Palmer-Reed", "Frank Berrow", "Sonny Okafor", "Marina Delacroix-Hale"];
 export const SILKS = ["#a4161a", "#0b3d91", "#e8b117", "#1b7a43", "#5e2b97", "#d2601a", "#0e7c86", "#7a1f5c"];
 
 export function makeField(race: RaceCard, horseOR: number, used: Set<string>): FieldEntry[] {

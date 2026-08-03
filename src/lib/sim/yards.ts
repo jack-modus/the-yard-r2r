@@ -1,18 +1,17 @@
-// The single trainer's yard, extracted/consolidated from
-// reference/rags-to-riches-v6.jsx's original three-boss choice.
-// Hard rule: no real named people — fictional, real-sounding names only.
+// The single trainer's yard. Hard rule: no real named people — fictional,
+// real-sounding names only.
 //
-// Berrow and Okafor (the other two original personas) aren't deleted —
-// they're repurposed as rival trainers (see race.ts RIVAL_TRAINERS) so
-// their writing isn't wasted, just reassigned.
+// Marina Delacroix-Hale (the previous pass's placeholder single trainer) and
+// the original Berrow/Okafor personas aren't deleted — they're repurposed as
+// rival trainers (see race.ts RIVAL_TRAINERS) so their writing isn't wasted.
 import { TIER1_COURSES } from "./courses";
 import type { Yard } from "./types";
 
 export const YARD: Yard = {
-  boss: "Marina Delacroix-Hale", yardName: "Delacroix-Hale Racing, Newmarket",
-  persona: "Elegant, exacting, quietly terrifying. Plans campaigns like chess games and expects her assistants to see three moves ahead.",
+  boss: "Simon Bridges", yardName: "Bridges Racing, Newmarket",
+  persona: "A trainer at the top of the game, and the only one willing to take a chance on you. Watched your grandfather ride out fifty years ago and hasn't forgotten it — or forgotten what your father did with the name.",
   tracks: TIER1_COURSES, jockey: { name: "Rossa Bellini", skill: 88 },
-  style: "all-round campaigner", greeting: n => `"${n}. I hire for judgement, not enthusiasm. There is a horse here whose entries I cannot justify to its owner. It is yours to prove me wrong about."`,
-  praise: ["\"Competent. Continue.\"", "\"I noticed. Others will too.\"", "\"That was... correct.\""],
-  scold: ["\"Explain your thinking. Slowly.\"", "\"We do not guess in this yard.\"", "\"Disappointing. Twice would be a pattern.\""],
+  style: "all-round campaigner", greeting: n => `"${n}. A fresh start — for both of us, if I'm honest. I'm taking a bit of a risk here."`,
+  praise: ["\"Aye, that's more like it.\"", "\"Your grandfather would've liked that.\"", "\"Good. Now do it again.\""],
+  scold: ["\"Explain that to me. Slowly.\"", "\"Your father talked a good game too, remember.\"", "\"I didn't take a risk on you for that.\""],
 };

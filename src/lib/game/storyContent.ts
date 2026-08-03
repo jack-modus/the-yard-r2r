@@ -3,10 +3,10 @@
 // as the ordinary trainingMoment events (content.ts). Orchestration (when
 // each beat fires, the nemesis mechanics) lives in story.ts; this file is
 // just the words and their stat effects.
-import { clamp } from "@/lib/sim";
-import type { CourseName, Horse } from "@/lib/sim";
+import { COURSES, clamp, nid, ri } from "@/lib/sim";
+import type { CalendarRace, CourseName, Horse } from "@/lib/sim";
 import { note } from "./stateUtils";
-import type { DecisionEvent, GameState } from "./types";
+import type { ClassicOutcome, DecisionEvent, GameState } from "./types";
 
 // ---------- Beat 3: the yard, another jockey, first-ambition question ----------
 // Defined before Beat 2 since Beat 2's choices need to enqueue it.
@@ -145,5 +145,85 @@ export function makeBeat8AllyTrainer(unlockedTracks: CourseName[]): DecisionEven
         `Callum talks you through ${course} for a solid hour, pint going flat. He clearly knows every blade of grass on the place, even if he can't train a winner on it. "Come find me again sometime — I'm always good for another track."`,
       ),
     })),
+  };
+}
+
+// ---------- Act 2: the Classics ----------
+// Same mini-arc runs for each of the five real Classics (see calendar.ts) —
+// horse choice, McLean's entry + media doubts folded into one decision, then
+// the race itself. Diminishing narrative weight per outing is applied in
+// story.ts, not here; this file only builds the content.
+export function makeClassicHorseChoice(horses: Horse[], race: CalendarRace): DecisionEvent {
+  const going = clamp(COURSES[race.course].going + ri(-1, 1), 1, 4);
+  return {
+    title: `${race.name} — who goes?`,
+    text: `Bridges corners you in the yard: "${race.name} is coming up. Biggest prize of the season so far, and reputations get made or lost on a day like that. Who are we sending?"`,
+    choices: horses.map(h => ({
+      label: h.name,
+      apply: (st: GameState) => note(
+        {
+          ...st,
+          entered: {
+            id: nid(), course: race.course, dist: race.dist, going, grade: race.grade,
+            raceDay: race.day, name: `${race.name} (${race.grade})`, isClassic: true, horseId: h.id,
+          },
+          story: { ...st.story, classicArc: { ...st.story.classicArc, stage: "horseChosen", horseId: h.id } },
+        },
+        `Declared: ${h.name} for the ${race.name}. No taking it back now.`,
+      ),
+    })),
+  };
+}
+
+export function makeClassicDoubts(horseName: string, raceName: string): DecisionEvent {
+  return {
+    title: "Doubts in the press",
+    text: `Word's out that McLean has one entered for the ${raceName} too. The papers are full of it: is ${horseName} really ready for this? Rumour has it the biggest jockeys in the weighing room won't touch the ride.`,
+    choices: [
+      {
+        label: "Defend the horse publicly",
+        hint: "+reputation, +celebrity",
+        apply: (st: GameState) => note(
+          { ...st, reputation: clamp(st.reputation + 2, 0, 100), celebrity: clamp(st.celebrity + 1, 0, 100) },
+          `You back your horse in print, no hedging. Bold — and a week later, word comes through that a genuinely top jockey has agreed to take the ride after all.`,
+        ),
+      },
+      {
+        label: "Let the form do the talking",
+        hint: "+reputation",
+        apply: (st: GameState) => note(
+          { ...st, reputation: clamp(st.reputation + 2, 0, 100) },
+          `You say nothing to the papers. A week later, word comes through anyway: a genuinely top jockey has agreed to take the ride. Say what you like about the doubters — nobody argues with a leg-up like that.`,
+        ),
+      },
+    ],
+  };
+}
+
+export function classicOutcomeMessage(outcome: ClassicOutcome, raceName: string, horseName: string): string {
+  switch (outcome) {
+    case "win": return `${horseName} WINS the ${raceName}! Pandemonium in the stands — this is the kind of day people remember for years.`;
+    case "place": return `${horseName} runs a huge race in the ${raceName}, right there without quite getting up. Nobody's disappointed with that.`;
+    case "okay": return `${horseName} runs its race in the ${raceName} without ever really threatening — competitive, no more than that.`;
+    case "tank": return `${horseName} never gets competitive in the ${raceName}. A day to forget, on the biggest stage there is.`;
+  }
+}
+
+// Occasional press callback referencing the most recent Classic result —
+// folded into the ordinary trainingMoment pool (content.ts), not a separate
+// bespoke system.
+export function makeClassicCallback(lastResult: { name: string; outcome: ClassicOutcome }): DecisionEvent {
+  return {
+    title: "The press remember",
+    text: `A reporter brings up the ${lastResult.name} again — ${
+      lastResult.outcome === "win" ? "your win there still gets mentioned whenever your name comes up"
+      : lastResult.outcome === "place" ? "that near-miss still comes up in conversation"
+      : lastResult.outcome === "okay" ? "even a quiet run there still gets a mention these days"
+      : "even the bad days get raked over, apparently"
+    }.`,
+    choices: [
+      { label: "Bask in it a little", hint: "+celebrity", apply: (st: GameState) => note({ ...st, celebrity: clamp(st.celebrity + 2, 0, 100) }, `You let the moment breathe. People like a trainer who enjoys the game.`) },
+      { label: "Deflect — it's the horse, not you", hint: "+reputation", apply: (st: GameState) => note({ ...st, reputation: clamp(st.reputation + 2, 0, 100) }, `A modest answer. The right people notice modesty.`) },
+    ],
   };
 }

@@ -1,15 +1,80 @@
 // Act 1 scripted-narrative state machine and nemesis (Martin McLean)
 // mechanics. Orchestration only — the actual beat dialogue lives in
 // storyContent.ts. See CLAUDE.md / the approved plan for the full design.
-import { OR, makeHorse, ri } from "@/lib/sim";
+import { CALENDAR, OR, makeHorse, ri } from "@/lib/sim";
 import type { FieldEntry, Horse, ScoredEntry } from "@/lib/sim";
-import { BEAT7_BRIDGES_ADVICE, makeBeat8AllyTrainer } from "./storyContent";
+import {
+  BEAT7_BRIDGES_ADVICE, classicOutcomeMessage, makeBeat8AllyTrainer, makeClassicDoubts, makeClassicHorseChoice,
+} from "./storyContent";
 import { unlockedCourses } from "./tracks";
-import type { GameState, StoryState } from "./types";
+import type { ClassicArcState, ClassicOutcome, GameState, StoryState } from "./types";
 
 export const NEMESIS_TRAINER = "Martin McLean";
 export const NEMESIS_YARD = "McLean Racing, Middleham";
 const NEMESIS_SILK = "#1a1a2e";
+
+// Days before each Classic's fixed CALENDAR day that the horse-choice /
+// media-doubts beats fire. Kept short of the real "a month or two" for the
+// later Classics simply because CALENDAR's gaps between them don't leave
+// room for a full month each — see CLAUDE.md "The Classics".
+const HORSE_CHOICE_LEAD = [35, 20, 25, 20, 40];
+const DOUBTS_LEAD = [15, 8, 10, 8, 15];
+
+export function scheduleClassicArc(index: number, fromDay: number): ClassicArcState {
+  if (index >= CALENDAR.length) return { stage: "pending", horseId: null, horseChoiceDay: null, doubtsDay: null };
+  const raceDay = CALENDAR[index].day;
+  const horseChoiceDay = Math.max(raceDay - HORSE_CHOICE_LEAD[index], fromDay + 3);
+  const doubtsDay = Math.max(raceDay - DOUBTS_LEAD[index], horseChoiceDay + 3);
+  return { stage: "pending", horseId: null, horseChoiceDay, doubtsDay };
+}
+
+// Diminishing returns per Classic index (1st→5th) — user's own framing:
+// "the same thing happens for each classic except the impact is less each time".
+const CLASSIC_DIMINISH = [1, 0.7, 0.5, 0.35, 0.25];
+const CLASSIC_DELTAS: Record<ClassicOutcome, { trust: number; reputation: number; celebrity: number; skill: number }> = {
+  win: { trust: 15, reputation: 20, celebrity: 8, skill: 5 },
+  place: { trust: 8, reputation: 10, celebrity: 3, skill: 3 },
+  okay: { trust: 2, reputation: 3, celebrity: 0, skill: 2 },
+  tank: { trust: -8, reputation: -10, celebrity: -2, skill: 1 },
+};
+
+export function classifyClassicOutcome(pos: number, fieldSize: number): ClassicOutcome {
+  if (pos === 1) return "win";
+  if (pos <= 3) return "place";
+  if (pos <= Math.ceil(fieldSize / 2)) return "okay";
+  return "tank";
+}
+
+// Called from resolveRaceDay when the resolved race has isClassic set.
+// Takes the CURRENT (possibly already-mutated-this-call, e.g. by the nemesis
+// block) story object, not st.story directly — resolveRaceDay may touch
+// story more than once in the same call if a Classic happens to coincide
+// with a forced nemesis race, and building off a stale snapshot would
+// silently discard those other changes.
+// Returns the stat deltas (already diminishing-returns-scaled) and the
+// updated story state (classicIndex bumped, next arc scheduled).
+export function resolveClassicOutcome(
+  story: StoryState, day: number, raceName: string, horseName: string, pos: number, fieldSize: number,
+): { trust: number; reputation: number; celebrity: number; skill: number; message: string; story: StoryState } {
+  const outcome = classifyClassicOutcome(pos, fieldSize);
+  const index = story.classicIndex;
+  const mult = CLASSIC_DIMINISH[Math.min(index, CLASSIC_DIMINISH.length - 1)];
+  const base = CLASSIC_DELTAS[outcome];
+  const nextIndex = index + 1;
+  return {
+    trust: Math.round(base.trust * mult),
+    reputation: Math.round(base.reputation * mult),
+    celebrity: Math.round(base.celebrity * mult),
+    skill: Math.round(base.skill * mult),
+    message: classicOutcomeMessage(outcome, raceName, horseName),
+    story: {
+      ...story,
+      classicIndex: nextIndex,
+      classicResults: [...story.classicResults, { name: raceName, outcome }],
+      classicArc: scheduleClassicArc(nextIndex, day),
+    },
+  };
+}
 
 export function newStoryState(): StoryState {
   return {
@@ -22,6 +87,12 @@ export function newStoryState(): StoryState {
     forceNemesisNextRace: false,
     scriptedFirstRaceLoss: false,
     headToHead: { wins: 0, losses: 0 },
+
+    classicIndex: 0,
+    classicResults: [],
+    classicArc: scheduleClassicArc(0, 1),
+    diamondCup: { stage: "pending", horseId: null, day: null },
+    fatherIntroduced: false,
   };
 }
 
@@ -72,6 +143,28 @@ export function checkStoryTriggers(s: GameState): GameState | null {
         ],
       };
     }
+  }
+
+  // --- the Classics: run on their own CALENDAR-day schedule, independent of
+  // Act 1's story.stage — the two arcs overlap in real time (McLean's second
+  // meeting can land mid-Classics), which is fine, they don't touch the same
+  // state. Guarded by !s.entered so a scripted declaration never clobbers
+  // whatever the player already has entered. ---
+  if (!s.entered && story.classicIndex < CALENDAR.length && story.classicArc.stage === "pending"
+    && story.classicArc.horseChoiceDay !== null && s.day >= story.classicArc.horseChoiceDay) {
+    const eligible = s.horses.filter(h => h.injuryDays === 0);
+    if (eligible.length) {
+      return { ...s, queue: [...s.queue, makeClassicHorseChoice(eligible, CALENDAR[story.classicIndex])] };
+    }
+  }
+  if (story.classicArc.stage === "horseChosen" && story.classicArc.doubtsDay !== null && s.day >= story.classicArc.doubtsDay) {
+    const race = CALENDAR[story.classicIndex];
+    const horse = s.horses.find(h => h.id === story.classicArc.horseId);
+    return {
+      ...s,
+      story: { ...story, classicArc: { ...story.classicArc, doubtsDay: null } },
+      queue: [...s.queue, makeClassicDoubts(horse?.name ?? "your horse", race.name)],
+    };
   }
 
   return null;

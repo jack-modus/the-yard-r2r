@@ -4,6 +4,7 @@ import { clamp, pick, ri } from "@/lib/sim";
 import { YARD } from "@/lib/sim";
 import type { Yard } from "@/lib/sim";
 import { note, withHorse } from "./stateUtils";
+import { makeClassicCallback } from "./storyContent";
 import type { DecisionEvent, GameState } from "./types";
 
 export const QUIET_DAYS = [
@@ -79,6 +80,9 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
       ],
     },
   ];
+  if (s.story.classicResults.length > 0) {
+    templates.push(makeClassicCallback(s.story.classicResults[s.story.classicResults.length - 1]));
+  }
   return pick(templates);
 }
 

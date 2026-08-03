@@ -117,7 +117,7 @@ function Upcoming({ g, yard, onEnterRace }: { g: GameState; yard: Yard; onEnterR
                     on={false}
                     onClick={() => onEnterRace({
                       id: nid(), course: cr.course, dist: cr.dist, going: clamp(COURSES[cr.course].going + ri(-1, 1), 1, 4),
-                      grade: cr.grade, raceDay: cr.day, name: `${cr.name} (${cr.grade})`,
+                      grade: cr.grade, raceDay: cr.day, name: `${cr.name} (${cr.grade})`, isClassic: cr.isClassic,
                     }, h.id)}
                   >
                     DECLARE {h.name.toUpperCase()}

@@ -22,6 +22,21 @@ export interface Milestones {
   tier2Unlocked: boolean;
 }
 
+export type ClassicOutcome = "win" | "place" | "okay" | "tank";
+
+export interface ClassicArcState {
+  stage: "pending" | "horseChosen";
+  horseId: number | null;
+  horseChoiceDay: number | null;
+  doubtsDay: number | null;
+}
+
+export interface DiamondCupState {
+  stage: "pending" | "announced" | "fatherRevealed" | "confronted" | "horseChosen" | "scarePending" | "cleared" | "done";
+  horseId: number | null;
+  day: number | null;
+}
+
 export interface Choice {
   label: string;
   hint?: string;
@@ -56,7 +71,7 @@ export type TrainingPlan = "gallop" | "canter" | "sprints" | "stalls" | "school"
 // existing DecisionOverlay/DailyFlashOverlay, same as ordinary content.
 export interface StoryState {
   stage: "yard" | "horsePick" | "preNemesis" | "nemesisPending"
-    | "preSecondRace" | "secondRacePending" | "ongoing";
+    | "preSecondRace" | "secondRacePending" | "ongoing" | "ended";
   nemesisHorseId: number | null;
   nemesisIntroDay: number | null;
   bridgesAdviceDay: number | null;
@@ -65,6 +80,13 @@ export interface StoryState {
   forceNemesisNextRace: boolean;
   scriptedFirstRaceLoss: boolean;
   headToHead: { wins: number; losses: number };
+
+  // Act 2/3 — the Classics, the Diamond Cup, the ending.
+  classicIndex: number; // how many Classics resolved (0-5); CALENDAR[classicIndex] is "the current one"
+  classicResults: { name: string; outcome: ClassicOutcome }[];
+  classicArc: ClassicArcState;
+  diamondCup: DiamondCupState;
+  fatherIntroduced: boolean;
 }
 
 export interface GameState {
@@ -97,5 +119,5 @@ export interface GameState {
   messages: Message[];
   news: string | null;
   milestones: Milestones;
-  epilogue: boolean;
+  ending: { verdict: "contract" | "poached" | "released"; text: string } | null;
 }

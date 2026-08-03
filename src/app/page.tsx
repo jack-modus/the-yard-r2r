@@ -10,7 +10,6 @@ import type { GameState, TrainingPlan } from "@/lib/game/types";
 import { IntroScreen } from "@/components/intro/IntroScreen";
 import { HorsePickScreen } from "@/components/intro/HorsePickScreen";
 import { Header } from "@/components/game/Header";
-import { EpilogueBanner } from "@/components/game/EpilogueBanner";
 import { DailyFlashOverlay } from "@/components/game/DailyFlashOverlay";
 import { DecisionOverlay } from "@/components/game/DecisionOverlay";
 import { HelpOverlay } from "@/components/game/HelpOverlay";
@@ -104,8 +103,6 @@ export default function Home() {
     <div className="min-h-screen bg-ink-950">
     <div className={`${COLUMN} font-diary text-[#eee6f2] pb-24`}>
       <Header g={g} yard={yard} onHelp={() => setHelpOpen(true)} />
-
-      {g.epilogue && <EpilogueBanner yard={yard} />}
 
       {g.flash && !g.liveRace && (
         <DailyFlashOverlay day={g.day} lines={g.flash} onContinue={() => setG(s => s && ({ ...s, flash: null }))} />

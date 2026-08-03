@@ -106,6 +106,7 @@ export interface RaceCard {
   grade: Grade;
   raceDay: number;
   name: string;
+  isClassic?: boolean;
 }
 
 export interface CalendarRace {
@@ -115,6 +116,11 @@ export interface CalendarRace {
   course: CourseName;
   dist: number;
   minOR: number;
+  // A Classic — runs the scripted Act 2 mini-arc (horse choice, McLean
+  // entering, media doubts, jockey booking, four-way outcome branch) and
+  // bypasses the normal tier-2 course lock for its own declaration, since
+  // it's a mandated story beat rather than organic content.
+  isClassic?: boolean;
 }
 
 export interface FieldEntry {

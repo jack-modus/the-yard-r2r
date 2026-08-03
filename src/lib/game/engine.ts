@@ -15,7 +15,7 @@ import {
   BEAT2_BRIDGES_OFFICE, BEAT5_REPORTER_PRE_RACE, BEAT6_MCLEAN_TAUNT,
 } from "./storyContent";
 import {
-  checkStoryTriggers, ensureNemesisInField, forcePosition, newStoryState, scheduleNemesisIntro,
+  checkStoryTriggers, ensureNemesisInField, forcePosition, newStoryState, resolveClassicOutcome, scheduleNemesisIntro,
 } from "./story";
 import { note } from "./stateUtils";
 import { unlockedCourses } from "./tracks";
@@ -44,7 +44,7 @@ export function newGame(used: Set<string>): GameState {
       { day: 1, text: `Tony Vincenzo arrives at ${yard.yardName}. Not a penny to his name — but a chance, and a big one.` },
     ],
     news: null, milestones: { firstWin: false, secondHorse: false, listedWin: false, groupWin: false, g1Win: false, tier2Unlocked: false },
-    epilogue: false,
+    ending: null,
   };
 }
 
@@ -72,10 +72,9 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
   const msgs: { day: number; text: string }[] = [];
   let trust = st.trust, cash = st.cash;
   let reputation = st.reputation, celebrity = st.celebrity;
-  const skill = clamp(st.skill + 3, 0, 100); // racing teaches you something regardless of result
+  let skill = clamp(st.skill + 3, 0, 100); // racing teaches you something regardless of result
   const mastery = { ...st.mastery };
   const milestones = { ...st.milestones };
-  let epilogue = st.epilogue;
   let results = st.results;
   let story = st.story;
   let queueExtra: GameState["queue"] = [];
@@ -96,7 +95,11 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
   const nemesisHorse = story.nemesisHorseId != null ? st.roster.find(h => h.id === story.nemesisHorseId) : undefined;
   const forcingNemesis = !!(story.forceNemesisNextRace && nemesisHorse);
   const rivals = forcingNemesis ? ensureNemesisInField(rivalsDrawn, nemesisHorse!) : rivalsDrawn;
-  const field = [...rivals, { horse: me, jkSkill: yard.jockey.skill, trainerName: yard.yardName, silk: "#14100a", player: true, expMod }];
+  // A Classic gets a genuinely top jockey booked, regardless of doubts —
+  // "eventually the top jockey takes the horse" is treated as inevitable,
+  // not a tracked choice (see storyContent.ts's media-doubts beat).
+  const jkSkill = race.isClassic ? ri(93, 98) : yard.jockey.skill;
+  const field = [...rivals, { horse: me, jkSkill, trainerName: yard.yardName, silk: "#14100a", player: true, expMod }];
   let res = runRace(race, field, mastery);
   if (forcingNemesis && story.scriptedFirstRaceLoss) res = forcePosition(res, nemesisHorse!.id, 1);
   const mine = res.find(r => r.player)!;
@@ -153,27 +156,48 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
     const names: Record<string, string> = { balance: "beautifully balanced — turns and cambers barely touch it", brk: "electric from the gates", temperament: "utterly unflappable — it runs its race every time", accel: "capable of a genuinely smart turn of foot" };
     msgs.push({ day: st.day, text: `Now everyone can see what you saw in the bottom box: ${me.name} is ${names[me.quirk.stat]}.` });
   }
-  const gw = gradeWeight(race.grade);
-  if (mine.pos === 1) {
-    me.wins++; me.morale = clamp(me.morale + 10, 0, 100); trust = clamp(trust + (typeof race.grade === "number" ? 5 : 10), 0, 100);
-    reputation = clamp(reputation + gw, 0, 100);
-    if (race.grade === "G1") { celebrity = clamp(celebrity + 10, 0, 100); msgs.push({ day: st.day, text: `The racing press is all over this one — a Group 1 winner from the bottom box makes a story too good to ignore.` }); }
-    else if (race.grade === "G2") celebrity = clamp(celebrity + 5, 0, 100);
-    msgs.push({ day: st.day, text: `${me.name} WINS the ${race.name}! ${pick(yard.praise)}` });
-    if (!milestones.firstWin) { milestones.firstWin = true; msgs.push({ day: st.day, text: `Your first winner as an assistant. The head lad shakes your hand. It starts here.` }); }
-    if (race.grade === "L" && !milestones.listedWin) milestones.listedWin = true;
-    if ((race.grade === "G3" || race.grade === "G2") && !milestones.groupWin) milestones.groupWin = true;
-    if (race.grade === "G1" && !milestones.g1Win) { milestones.g1Win = true; epilogue = true; }
-  } else if (mine.pos <= 3) {
-    reputation = clamp(reputation + Math.max(1, Math.round(gw / 3)), 0, 100);
-    msgs.push({ day: st.day, text: `${me.name} finishes ${mine.pos} of ${res.length}. Plenty to build on.` });
+  if (race.isClassic) {
+    // The Classics use their own diminishing-returns outcome system instead
+    // of the ordinary grade-weighted trust/reputation logic below — applying
+    // both would double-count.
+    const cleanRaceName = race.name.replace(/\s*\([^)]*\)$/, "");
+    const outcome = resolveClassicOutcome(story, st.day, cleanRaceName, me.name, mine.pos, res.length);
+    trust = clamp(trust + outcome.trust, 0, 100);
+    reputation = clamp(reputation + outcome.reputation, 0, 100);
+    celebrity = clamp(celebrity + outcome.celebrity, 0, 100);
+    skill = clamp(skill + outcome.skill, 0, 100);
+    story = outcome.story;
+    msgs.push({ day: st.day, text: outcome.message });
+    if (mine.pos === 1) {
+      me.wins++; me.morale = clamp(me.morale + 10, 0, 100);
+      if (!milestones.firstWin) { milestones.firstWin = true; msgs.push({ day: st.day, text: `Your first winner as an assistant. The head lad shakes your hand. It starts here.` }); }
+      milestones.g1Win = true; milestones.groupWin = true;
+    } else if (mine.pos > res.length - 2) {
+      me.morale = clamp(me.morale - 4, 0, 100);
+    }
   } else {
-    if (mine.pos > res.length - 2) {
-      trust = clamp(trust - 2, 0, 100);
-      reputation = clamp(reputation - Math.max(1, Math.round(gw / 4)), 0, 100);
-      msgs.push({ day: st.day, text: `Well beaten. ${pick(yard.scold)}` });
-    } else msgs.push({ day: st.day, text: `${me.name} finishes ${mine.pos} of ${res.length}. Back to the drawing board.` });
-    me.morale = clamp(me.morale - (mine.pos > 5 ? 4 : 0), 0, 100);
+    const gw = gradeWeight(race.grade);
+    if (mine.pos === 1) {
+      me.wins++; me.morale = clamp(me.morale + 10, 0, 100); trust = clamp(trust + (typeof race.grade === "number" ? 5 : 10), 0, 100);
+      reputation = clamp(reputation + gw, 0, 100);
+      if (race.grade === "G1") { celebrity = clamp(celebrity + 10, 0, 100); msgs.push({ day: st.day, text: `The racing press is all over this one — a Group 1 winner from the bottom box makes a story too good to ignore.` }); }
+      else if (race.grade === "G2") celebrity = clamp(celebrity + 5, 0, 100);
+      msgs.push({ day: st.day, text: `${me.name} WINS the ${race.name}! ${pick(yard.praise)}` });
+      if (!milestones.firstWin) { milestones.firstWin = true; msgs.push({ day: st.day, text: `Your first winner as an assistant. The head lad shakes your hand. It starts here.` }); }
+      if (race.grade === "L" && !milestones.listedWin) milestones.listedWin = true;
+      if ((race.grade === "G3" || race.grade === "G2") && !milestones.groupWin) milestones.groupWin = true;
+      if (race.grade === "G1" && !milestones.g1Win) milestones.g1Win = true;
+    } else if (mine.pos <= 3) {
+      reputation = clamp(reputation + Math.max(1, Math.round(gw / 3)), 0, 100);
+      msgs.push({ day: st.day, text: `${me.name} finishes ${mine.pos} of ${res.length}. Plenty to build on.` });
+    } else {
+      if (mine.pos > res.length - 2) {
+        trust = clamp(trust - 2, 0, 100);
+        reputation = clamp(reputation - Math.max(1, Math.round(gw / 4)), 0, 100);
+        msgs.push({ day: st.day, text: `Well beaten. ${pick(yard.scold)}` });
+      } else msgs.push({ day: st.day, text: `${me.name} finishes ${mine.pos} of ${res.length}. Back to the drawing board.` });
+      me.morale = clamp(me.morale - (mine.pos > 5 ? 4 : 0), 0, 100);
+    }
   }
 
   // --- the handicapper's letter: the official mark only moves when the form is reviewed ---
@@ -197,7 +221,7 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
   }
   results = [{ race, res: res.slice(0, 6), mine, cmt }, ...results].slice(0, 30);
   return {
-    ...st, horses, roster, trust, cash, reputation, celebrity, skill, mastery, milestones, epilogue, results, entered: null, story,
+    ...st, horses, roster, trust, cash, reputation, celebrity, skill, mastery, milestones, results, entered: null, story,
     queue: [...st.queue, ...queueExtra],
     liveRace: { raceName: race.name, beats: makeBeats(race, res, mine, tactic), idx: 0 },
     messages: [...msgs, ...st.messages].slice(0, 60),
@@ -214,7 +238,6 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
   let skill = s.skill;
   const mastery = { ...s.mastery };
   const milestones = { ...s.milestones };
-  const epilogue = s.epilogue;
   const results = s.results, entered = s.entered;
   let slate = s.slate;
   let queue: GameState["queue"] = [];
@@ -380,7 +403,7 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
 
   const flashLines = [...msgs.map(m => m.text), ...(newsLine ? [newsLine] : [])];
   return {
-    ...s, day, year, horses, trust, cash, reputation, celebrity, skill, mastery, slate, entered, results, milestones, epilogue,
+    ...s, day, year, horses, trust, cash, reputation, celebrity, skill, mastery, slate, entered, results, milestones,
     messages: [...msgs, ...s.messages].slice(0, 60), news: newsLine, queue,
     flash: (queue.length === 0 && flashLines.length) ? flashLines : null,
   };

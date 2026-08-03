@@ -3,7 +3,7 @@
 // as the ordinary trainingMoment events (content.ts). Orchestration (when
 // each beat fires, the nemesis mechanics) lives in story.ts; this file is
 // just the words and their stat effects.
-import { COURSES, YARD, clamp, nid, ri } from "@/lib/sim";
+import { COURSES, OR, YARD, clamp, drawField, nid, ri } from "@/lib/sim";
 import type { CalendarRace, CourseName, Horse } from "@/lib/sim";
 import { note } from "./stateUtils";
 import type { ClassicOutcome, DecisionEvent, GameState } from "./types";
@@ -184,17 +184,22 @@ export function makeClassicHorseChoice(horses: Horse[], race: CalendarRace): Dec
     text: `Bridges corners you in the yard: "${race.name} is coming up. Biggest prize of the season so far, and reputations get made or lost on a day like that. Who are we sending?"`,
     choices: horses.map(h => ({
       label: h.name,
-      apply: (st: GameState) => note(
-        {
-          ...st,
-          entered: {
-            id: nid(), course: race.course, dist: race.dist, going, grade: race.grade,
-            raceDay: race.day, name: `${race.name} (${race.grade})`, isClassic: true, horseId: h.id,
+      apply: (st: GameState) => {
+        const raceCard = {
+          id: nid(), course: race.course, dist: race.dist, going, grade: race.grade,
+          raceDay: race.day, name: `${race.name} (${race.grade})`, isClassic: true,
+        };
+        const { entries } = drawField(st.roster, raceCard, new Set(), st.usedNames);
+        const fieldPreview = entries.map(e => ({ name: e.horse.name, trainerName: e.trainerName ?? "unattached", mark: e.horse.mark ?? Math.round(OR(e.horse)) }));
+        return note(
+          {
+            ...st,
+            entered: [...st.entered, { ...raceCard, horseId: h.id, fieldPreview }],
+            story: { ...st.story, classicArc: { ...st.story.classicArc, stage: "horseChosen", horseId: h.id } },
           },
-          story: { ...st.story, classicArc: { ...st.story.classicArc, stage: "horseChosen", horseId: h.id } },
-        },
-        `Declared: ${h.name} for the ${race.name}. No taking it back now.`,
-      ),
+          `Declared: ${h.name} for the ${race.name}. No taking it back now.`,
+        );
+      },
     })),
   };
 }
@@ -317,17 +322,22 @@ export function makeDiamondCupHorseChoice(horses: Horse[], raceDay: number): Dec
     text: `This is the one. The biggest purse in the sport, and it's yours to enter. Who carries the silks?`,
     choices: horses.map(h => ({
       label: h.name,
-      apply: (st: GameState) => note(
+      apply: (st: GameState) => {
+        const raceCard = {
+          id: nid(), course: DIAMOND_CUP_COURSE, dist: DIAMOND_CUP_DIST, going, grade: "G1" as const,
+          raceDay, name: "The Diamond Cup", isDiamondCup: true,
+        };
+        const { entries } = drawField(st.roster, raceCard, new Set(), st.usedNames);
+        const fieldPreview = entries.map(e => ({ name: e.horse.name, trainerName: e.trainerName ?? "unattached", mark: e.horse.mark ?? Math.round(OR(e.horse)) }));
+        return note(
         {
           ...st,
-          entered: {
-            id: nid(), course: DIAMOND_CUP_COURSE, dist: DIAMOND_CUP_DIST, going, grade: "G1",
-            raceDay, name: "The Diamond Cup", isDiamondCup: true, horseId: h.id,
-          },
+          entered: [...st.entered, { ...raceCard, horseId: h.id, fieldPreview }],
           story: { ...st.story, diamondCup: { ...st.story.diamondCup, stage: "horseChosen", horseId: h.id } },
         },
-        `Declared: ${h.name} for the Diamond Cup. Everything comes down to this.`,
-      ),
+          `Declared: ${h.name} for the Diamond Cup. Everything comes down to this.`,
+        );
+      },
     })),
   };
 }

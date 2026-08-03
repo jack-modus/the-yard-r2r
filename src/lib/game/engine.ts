@@ -20,7 +20,7 @@ import {
 } from "./story";
 import { note } from "./stateUtils";
 import { unlockedCourses } from "./tracks";
-import type { EnteredRace, GameState, TrainingPlan } from "./types";
+import type { GameState, TrainingPlan } from "./types";
 
 export { REPUTATION_TIER2_UNLOCK, unlockedCourses } from "./tracks";
 
@@ -43,7 +43,7 @@ export function newGame(used: Set<string>): GameState {
     day: 1, year: 1, cash: 500, trust: 20, reputation: 10, celebrity: 0, skill: 0,
     story: newStoryState(), awaitingHorsePick: false, horseCandidates: makeCandidateHorses(used, 6),
     horses: [], usedNames: used, mastery, roster: makeRoster(used),
-    slate: [], entered: null, results: [], queue: [BEAT2_BRIDGES_OFFICE], flash: null, liveRace: null, study: null,
+    slate: [], entered: [], results: [], queue: [BEAT2_BRIDGES_OFFICE], flash: null, liveRace: null, study: null,
     messages: [
       { day: 1, text: `Tony Vincenzo arrives at ${yard.yardName}. Not a penny to his name — but a chance, and a big one.` },
     ],
@@ -68,12 +68,13 @@ export function resolveHorsePick(s: GameState, chosenIds: number[]): GameState {
 }
 
 // ---------- race resolution (called from the tactics decision) ----------
-export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
+export function resolveRaceDay(st: GameState, tactic: Tactic, raceId: number): GameState {
   const yard = YARD;
-  const race = st.entered as EnteredRace;
+  const race = st.entered.find(r => r.id === raceId)!;
   const horses = st.horses.map(h => ({ ...h }));
   const me = horses.find(h => h.id === race.horseId)!;
   const msgs: { day: number; text: string }[] = [];
+  const trustBefore = st.trust, reputationBefore = st.reputation, celebrityBefore = st.celebrity;
   let trust = st.trust, cash = st.cash;
   let reputation = st.reputation, celebrity = st.celebrity;
   let skill = clamp(st.skill + 3, 0, 100); // racing teaches you something regardless of result
@@ -261,9 +262,22 @@ export function resolveRaceDay(st: GameState, tactic: Tactic): GameState {
       msgs.push({ day: st.day, text: `Letter from the handicapper: ${me.name} is ${delta > 0 ? "raised" : "eased"} ${Math.abs(delta)}lb to a new mark of ${me.mark}, after ${why}.` });
     }
   }
-  results = [{ race, res: res.slice(0, 6), mine, cmt }, ...results].slice(0, 30);
+  // Race-day is the one place Trust/Reputation/Celebrity change outside a
+  // decision's own reveal-after text — state the actual deltas here rather
+  // than leaving them to change silently, same convention as note()'s
+  // "(Metric ±N.)" suffix on decisions.
+  const dTrust = trust - trustBefore, dRep = reputation - reputationBefore, dCel = celebrity - celebrityBefore;
+  if (dTrust !== 0 || dRep !== 0 || dCel !== 0) {
+    const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
+    msgs.push({
+      day: st.day,
+      text: `Trust ${fmt(dTrust)}, Reputation ${fmt(dRep)}, Celebrity ${fmt(dCel)}.`,
+    });
+  }
+  results = [{ race, res, mine, cmt }, ...results].slice(0, 30);
   return {
-    ...st, horses, roster, trust, cash, reputation, celebrity, skill, mastery, milestones, results, entered: null, story, ending,
+    ...st, horses, roster, trust, cash, reputation, celebrity, skill, mastery, milestones, results,
+    entered: st.entered.filter(r => r.id !== raceId), story, ending,
     queue: [...st.queue, ...queueExtra],
     liveRace: { raceName: race.name, beats: makeBeats(race, res, mine, tactic), idx: 0 },
     messages: [...msgs, ...st.messages].slice(0, 60),
@@ -280,70 +294,75 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
   let skill = s.skill;
   const mastery = { ...s.mastery };
   const milestones = { ...s.milestones };
-  const results = s.results, entered = s.entered;
+  const results = s.results;
   let slate = s.slate;
   let queue: GameState["queue"] = [];
+  let entered = s.entered;
+  let story = s.story;
 
-  // --- going update, a few days out: weather can turn a declared race against you ---
-  if (entered && entered.raceDay - s.day === 3 && Math.random() < 0.4) {
-    const me = horses.find(h => h.id === entered!.horseId);
-    const newGoing = clamp(entered.going + pick([-1, 1, 1]), 1, 4); // rain more likely than a dry-out, as in Britain
-    if (me && newGoing !== entered.going) {
-      const clash = me.goingKnown && Math.abs(me.prefGoing - newGoing) >= 2;
-      return {
-        ...s, entered: { ...entered, going: newGoing }, queue: [{
-          title: "The going has changed",
-          text: `Overnight rain at ${entered.course} — the official going for the ${entered.name} is now ${GOINGS[newGoing]}, not ${GOINGS[entered.going]} as declared. ${
-            me.goingKnown ? `You know ${me.name} wants ${GOINGS[me.prefGoing]}.` : `You don't yet know for certain what ground ${me.name} prefers.`
-          } ${clash ? "This looks like a poor fit." : ""}`,
-          choices: [
-            { label: "Run anyway", hint: clash ? "risks a well-below-form run on unsuitable ground" : "probably fine", apply: st => note(st, `${me.name} takes its chance regardless. The decision is made.`) },
-            { label: "Withdraw the horse", hint: "no run, no risk — but the boss loses the entry", apply: st => note({ ...st, entered: null, trust: clamp(st.trust - 3, 0, 100) },
-              `${me.name} is withdrawn. ${yard.boss}: "${pick(["Fair enough — no sense chancing it.", "Your call. I trust your reasons.", "Costs us the entry fee, mind."])}"`) },
-          ],
-        }],
-      };
-    }
-  }
+  // --- going update, a few days out: weather can turn a declared race against
+  // you. Per-entry now (not a whole-day early return) so one race's going
+  // changing doesn't stop the rest of the string training that day. ---
+  entered = entered.map(e => {
+    if (e.raceDay - s.day !== 3 || Math.random() >= 0.4) return e;
+    const me = horses.find(h => h.id === e.horseId);
+    const newGoing = clamp(e.going + pick([-1, 1, 1]), 1, 4); // rain more likely than a dry-out, as in Britain
+    if (!me || newGoing === e.going) return e;
+    const clash = me.goingKnown && Math.abs(me.prefGoing - newGoing) >= 2;
+    queue = [...queue, {
+      title: "The going has changed",
+      text: `Overnight rain at ${e.course} — the official going for the ${e.name} is now ${GOINGS[newGoing]}, not ${GOINGS[e.going]} as declared. ${
+        me.goingKnown ? `You know ${me.name} wants ${GOINGS[me.prefGoing]}.` : `You don't yet know for certain what ground ${me.name} prefers.`
+      } ${clash ? "This looks like a poor fit." : ""}`,
+      choices: [
+        { label: "Run anyway", hint: clash ? "risks a well-below-form run on unsuitable ground" : "probably fine", apply: st => note(st, `${me.name} takes its chance regardless. The decision is made.`) },
+        { label: "Withdraw the horse", hint: "no run, no risk — but the boss loses the entry", apply: st => note({ ...st, entered: st.entered.filter(x => x.id !== e.id), trust: clamp(st.trust - 3, 0, 100) },
+          `${me.name} is withdrawn. ${yard.boss}: "${pick(["Fair enough — no sense chancing it.", "Your call. I trust your reasons.", "Costs us the entry fee, mind."])}"`) },
+      ],
+    }];
+    return { ...e, going: newGoing };
+  });
 
-  // --- race day? route through the parade-ring tactics decision ---
-  if (entered && entered.raceDay <= s.day) {
-    const me = horses.find(h => h.id === entered!.horseId);
+  // --- race day(s)? route each one due today through its own parade-ring
+  // tactics decision. Per-entry (not a whole-day early return) so a race for
+  // one horse doesn't block training/reporting for the rest of the string. ---
+  const raceDueToday = new Set<number>(); // horseIds racing today — skip their training below
+  entered = entered.filter(e => {
+    if (e.raceDay > s.day) return true;
+    const me = horses.find(h => h.id === e.horseId);
     if (!me || me.injuryDays > 0) {
       // A scratched Classic/Diamond Cup can't just vanish — nothing else
       // ever re-triggers that arc otherwise, permanently stalling Act 2/3.
       // See skipClassic/rescheduleDiamondCup in story.ts.
-      if (entered.isClassic) {
-        return {
-          ...s, entered: null, story: skipClassic(s.story, s.day),
-          messages: [{ day: s.day, text: classicScratchedMessage(entered.name.replace(/\s*\([^)]*\)$/, ""), me?.name ?? "Your runner") }, ...s.messages].slice(0, 60),
-        };
+      if (e.isClassic) {
+        story = skipClassic(story, s.day);
+        msgs.push({ day: s.day, text: classicScratchedMessage(e.name.replace(/\s*\([^)]*\)$/, ""), me?.name ?? "Your runner") });
+      } else if (e.isDiamondCup) {
+        story = rescheduleDiamondCup(story, s.day);
+        msgs.push({ day: s.day, text: `${me ? me.name : "Your runner"} is scratched from the Diamond Cup — not fit to take its chance. Bridges is already talking about another entry.` });
+      } else {
+        msgs.push({ day: s.day, text: `${me ? me.name : "Your runner"} is scratched — not fit to take its chance.` });
       }
-      if (entered.isDiamondCup) {
-        return {
-          ...s, entered: null, story: rescheduleDiamondCup(s.story, s.day),
-          messages: [{ day: s.day, text: `${me ? me.name : "Your runner"} is scratched from the Diamond Cup — not fit to take its chance. Bridges is already talking about another entry.` }, ...s.messages].slice(0, 60),
-        };
-      }
-      return { ...s, entered: null, messages: [{ day: s.day, text: `${me ? me.name : "Your runner"} is scratched — not fit to take its chance.` }, ...s.messages].slice(0, 60) };
+      return false;
     }
+    raceDueToday.add(me.id);
     const nemesisPreRaceLine = (s.story.forceNemesisNextRace && s.story.stage === "secondRacePending")
       ? ` McLean's already at it in the press: "Should be a good renewal this year — might even be competitive."`
       : "";
     const tacticsEvent: GameState["queue"][number] = {
       title: "Riding instructions",
-      text: `${yard.jockey.name} legs up in the parade ring before the ${entered.name}. "How do you want ${me.name} ridden?"${nemesisPreRaceLine}`,
+      text: `${yard.jockey.name} legs up in the parade ring before the ${e.name}. "How do you want ${me.name} ridden?"${nemesisPreRaceLine}`,
       choices: [
-        { label: `Break sharp and make the running (plays to break: ${Math.round(me.brk)})`, apply: st => resolveRaceDay(st, "front") },
-        { label: `Settle just off the pace (plays to temperament: ${Math.round(me.temperament)})`, apply: st => resolveRaceDay(st, "stalk") },
-        { label: `Hold up for one late run (plays to accel: ${Math.round(me.accel)}, traffic risk)`, apply: st => resolveRaceDay(st, "hold") },
+        { label: `Break sharp and make the running (plays to break: ${Math.round(me.brk)})`, apply: st => resolveRaceDay(st, "front", e.id) },
+        { label: `Settle just off the pace (plays to temperament: ${Math.round(me.temperament)})`, apply: st => resolveRaceDay(st, "stalk", e.id) },
+        { label: `Hold up for one late run (plays to accel: ${Math.round(me.accel)}, traffic risk)`, apply: st => resolveRaceDay(st, "hold", e.id) },
       ],
     };
-    if (s.story.forceNemesisNextRace && s.story.stage === "nemesisPending") {
-      return { ...s, queue: [BEAT5_REPORTER_PRE_RACE, tacticsEvent] };
-    }
-    return { ...s, queue: [tacticsEvent] };
-  }
+    queue = (s.story.forceNemesisNextRace && s.story.stage === "nemesisPending")
+      ? [...queue, BEAT5_REPORTER_PRE_RACE, tacticsEvent]
+      : [...queue, tacticsEvent];
+    return true; // stays in `entered` until resolveRaceDay actually resolves it
+  });
 
   // --- course walk: takes your whole day, so the string just ticks over ---
   const walking = walkPlan && COURSES[walkPlan];
@@ -371,6 +390,10 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
     if (h.injuryDays > 0) {
       h.injuryDays--; h.fatigue = Math.max(0, h.fatigue - 12);
       reportLines.push(`${h.name}: on the easy list, ${h.injuryDays} day${h.injuryDays === 1 ? "" : "s"} left.`);
+      return;
+    }
+    if (raceDueToday.has(h.id)) {
+      reportLines.push(`${h.name}: race day — resting up for it, no training.`);
       return;
     }
     const p = walking ? "easy" : (plan[h.id] || "easy");
@@ -428,7 +451,15 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
   }
 
   // --- scripted Act 1 story beats take priority over the normal random roll ---
-  const storyTriggered = checkStoryTriggers({ ...s, horses, mastery, skill });
+  // Threads through this tick's already-accumulated entered/story/queue/msgs
+  // (e.g. a same-day scratch) so a trigger firing here doesn't silently
+  // discard them — before the going-change/race-day branches stopped
+  // early-returning, this call always ran with nothing yet accumulated, so
+  // this merge wasn't needed; now it is.
+  const storyTriggered = checkStoryTriggers({
+    ...s, horses, mastery, skill, entered, story, slate, queue,
+    messages: [...msgs, ...s.messages].slice(0, 60),
+  });
   if (storyTriggered) return storyTriggered;
 
   // --- day content: quiet / news / decision — decision odds raised (18%->30%)
@@ -444,7 +475,7 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
 
   // --- new race slate every few days ---
   const myBest = horses.filter(h => h.injuryDays === 0).sort((a, b) => OR(b) - OR(a))[0];
-  if (!entered && myBest && (slate.length === 0 || Math.random() < 0.35)) {
+  if (myBest && (slate.length === 0 || Math.random() < 0.35)) {
     slate = makeSlate(s.day + 1, unlockedCourses(reputation), effRating(myBest));
     if (slate.length) reportLines.push(`New entries up: ${slate.map(r => r.name).join(", ")}.`);
   }
@@ -485,7 +516,7 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
   // day-to-day change was otherwise invisible.
   const flashLines = [...reportLines, ...msgs.map(m => m.text), ...(newsLine ? [newsLine] : [])];
   return {
-    ...s, day, year, horses, trust, cash, reputation, celebrity, skill, mastery, slate, entered, results, milestones,
+    ...s, day, year, horses, trust, cash, reputation, celebrity, skill, mastery, slate, entered, story, results, milestones,
     messages: [...msgs, ...s.messages].slice(0, 60), news: newsLine, queue,
     flash: flashLines.length ? flashLines : null,
   };
@@ -499,8 +530,16 @@ export function chooseDecision(s: GameState, i: number): GameState {
 }
 
 export function enterRace(s: GameState, raceOpt: RaceCard, horseId: number): GameState {
+  if (s.entered.some(e => e.horseId === horseId)) return s; // defensive: UI shouldn't offer this, but don't double-book
+  // A one-off indicative preview of likely opposition, drawn the same way a
+  // real field is drawn — not locked in or reused at resolution, so it's
+  // "who you're probably up against," not a guarantee. See CLAUDE.md.
+  const { entries } = drawField(s.roster, raceOpt, new Set(), s.usedNames);
+  const fieldPreview = entries.map(e => ({ name: e.horse.name, trainerName: e.trainerName ?? "unattached", mark: e.horse.mark ?? Math.round(OR(e.horse)) }));
   return {
-    ...s, entered: { ...raceOpt, horseId }, slate: [],
+    ...s,
+    entered: [...s.entered, { ...raceOpt, horseId, fieldPreview }],
+    slate: s.slate.filter(r => r.id !== raceOpt.id),
     messages: [{ day: s.day, text: `Declared: ${s.horses.find(h => h.id === horseId)!.name} in the ${raceOpt.name}, ${raceOpt.dist}f, day ${raceOpt.raceDay}.` }, ...s.messages].slice(0, 60),
   };
 }

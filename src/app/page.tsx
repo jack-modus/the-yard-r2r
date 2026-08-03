@@ -21,7 +21,8 @@ import { StableTab } from "@/components/game/StableTab";
 import { RacingTab, type RaceSub, type ResultsFilter } from "@/components/game/RacingTab";
 import { NotebookTab } from "@/components/game/NotebookTab";
 import { YardTab } from "@/components/game/YardTab";
-import { COLUMN } from "@/components/ui/layout";
+import { COLUMN, COLUMN_PLAIN } from "@/components/ui/layout";
+import { Button } from "@/components/ui/Button";
 
 export default function Home() {
   const [g, setG] = useState<GameState | null>(null);
@@ -32,6 +33,10 @@ export default function Home() {
   const [raceSub, setRaceSub] = useState<RaceSub>("upcoming");
   const [resultsFilter, setResultsFilter] = useState<ResultsFilter>("all");
   const [helpOpen, setHelpOpen] = useState(false);
+  // Transient UI-only state (not GameState — doesn't need persisting): the
+  // just-resolved decision's outcome text, so the reveal-after metric deltas
+  // are visible immediately instead of only in the Yard tab's message log.
+  const [outcomeText, setOutcomeText] = useState<string | null>(null);
 
   useEffect(() => {
     // localStorage is a browser-only external system — reading it on mount and
@@ -83,8 +88,8 @@ export default function Home() {
 
   const yard = YARD;
   const decision = g.queue[0] || null;
-  const raceToday = g.entered && g.entered.raceDay <= g.day + 1;
-  const advanceLocked = !!decision || !!g.flash || !!g.liveRace;
+  const raceToday = g.entered.some(r => r.raceDay <= g.day + 1);
+  const advanceLocked = !!decision || !!g.flash || !!g.liveRace || !!outcomeText;
 
   const advance = () => {
     if (advanceLocked) return;
@@ -114,7 +119,23 @@ export default function Home() {
       )}
 
       {decision && !g.liveRace && (
-        <DecisionOverlay decision={decision} onChoose={i => setG(s => (s ? engineChooseDecision(s, i) : s))} />
+        <DecisionOverlay decision={decision} onChoose={i => setG(s => {
+          if (!s) return s;
+          const next = engineChooseDecision(s, i);
+          setOutcomeText(next.messages[0]?.text ?? null);
+          return next;
+        })} />
+      )}
+
+      {outcomeText && !g.liveRace && (
+        <div className="fixed inset-0 bg-black/70 z-[35] flex items-center p-4">
+          <div className={`${COLUMN_PLAIN} bg-ink-800 border border-gold-500 rounded p-4`}>
+            <div className="text-sm leading-relaxed py-1.5">{outcomeText}</div>
+            <Button className="block w-full mt-2.5 text-center" onClick={() => setOutcomeText(null)}>
+              CONTINUE
+            </Button>
+          </div>
+        </div>
       )}
 
       {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}

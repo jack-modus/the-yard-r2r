@@ -231,11 +231,26 @@ export function checkStoryTriggers(s: GameState): GameState | null {
   // --- the Classics: run on their own CALENDAR-day schedule, independent of
   // Act 1's story.stage — the two arcs overlap in real time (McLean's second
   // meeting can land mid-Classics), which is fine, they don't touch the same
-  // state. Guarded by !s.entered so a scripted declaration never clobbers
-  // whatever the player already has entered. ---
-  if (!s.entered && story.classicIndex < CALENDAR.length && story.classicArc.stage === "pending"
+  // state. Gated to year 2+ per playtesting feedback — year 1 is normal
+  // build-up racing now that horses are earned by results, not picked 3-of-6
+  // up front. `day` is day-of-year and resets each year, so this can't be
+  // done by retuning CALENDAR's day values (year 1 day 50 and year 2 day 50
+  // are indistinguishable to the day-only comparison below) — it needs an
+  // explicit year check. Horse eligibility excludes a horse only if its
+  // existing commitment would still be pending close to the Classic's own
+  // fixed race day (a real scheduling conflict) — not any entry whatsoever.
+  // An early version excluded any entered horse outright, which meant an
+  // active player who keeps every horse booked into near-term ordinary races
+  // (exactly what multi-race declarations are meant to encourage) could
+  // starve this trigger indefinitely, since ordinary bookings almost always
+  // resolve weeks before a Classic's own date anyway. Caught via scripted
+  // playthrough — a naive "book everything" bot ran to year 3 with the
+  // trigger never firing once. ---
+  if (s.year >= 2 && story.classicIndex < CALENDAR.length && story.classicArc.stage === "pending"
     && story.classicArc.horseChoiceDay !== null && s.day >= story.classicArc.horseChoiceDay) {
-    const eligible = s.horses.filter(h => h.injuryDays === 0);
+    const classicRaceDay = CALENDAR[story.classicIndex].day;
+    const eligible = s.horses.filter(h => h.injuryDays === 0
+      && !s.entered.some(e => e.horseId === h.id && e.raceDay >= classicRaceDay - 10));
     if (eligible.length) {
       return { ...s, queue: [...s.queue, makeClassicHorseChoice(eligible, CALENDAR[story.classicIndex])] };
     }
@@ -277,8 +292,11 @@ export function checkStoryTriggers(s: GameState): GameState | null {
       queue: [...s.queue, BEAT_FATHER_CONFRONTED],
     };
   }
-  if (dc.stage === "confronted" && !s.entered && s.day >= (dc.raceDay! - 12)) {
-    const eligible = s.horses.filter(h => h.injuryDays === 0);
+  if (dc.stage === "confronted" && s.day >= (dc.raceDay! - 12)) {
+    // Same real-conflict-only filter as the Classics above, not "any entry
+    // at all" — see that comment for why.
+    const eligible = s.horses.filter(h => h.injuryDays === 0
+      && !s.entered.some(e => e.horseId === h.id && e.raceDay >= dc.raceDay! - 10));
     if (eligible.length) {
       return { ...s, queue: [...s.queue, makeDiamondCupHorseChoice(eligible, dc.raceDay!)] };
     }

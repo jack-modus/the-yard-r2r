@@ -50,21 +50,29 @@ export function RacingTab({
 }
 
 function Upcoming({ g, yard, onEnterRace }: { g: GameState; yard: Yard; onEnterRace: (race: RaceCard, horseId: number) => void }) {
+  const enteredHorseIds = new Set(g.entered.map(e => e.horseId));
   return (
     <>
-      {g.entered ? (
-        <Card highlight>
-          <div className="font-bold text-base">Declared: {g.entered.name}</div>
+      {g.entered.map(e => (
+        <Card key={e.id} highlight>
+          <div className="font-bold text-base">Declared: {e.name}</div>
           <div className="font-mono text-[11.5px] text-muted-dim">
-            {g.entered.course} · {g.entered.dist}f · {GOINGS[g.entered.going]} · race day {g.entered.raceDay} ({g.entered.raceDay - g.day} day{g.entered.raceDay - g.day === 1 ? "" : "s"} away)
+            {e.course} · {e.dist}f · {GOINGS[e.going]} · race day {e.raceDay} ({e.raceDay - g.day} day{e.raceDay - g.day === 1 ? "" : "s"} away)
           </div>
-          <div className="font-mono text-[11.5px] text-muted-dim">{COURSES[g.entered.course].line}</div>
+          <div className="font-mono text-[11.5px] text-muted-dim">{COURSES[e.course].line}</div>
           <div className="font-mono text-[11.5px] text-muted-dim mt-1">
-            Runner: {g.horses.find(h => h.id === g.entered!.horseId)?.name} · ridden by {yard.jockey.name}
-            {" · "}your course knowledge: {Math.round(g.mastery[g.entered.course])}/100
+            Runner: {g.horses.find(h => h.id === e.horseId)?.name} · ridden by {yard.jockey.name}
+            {" · "}your course knowledge: {Math.round(g.mastery[e.course])}/100
           </div>
+          {e.fieldPreview.length > 0 && (
+            <div className="font-mono text-[11.5px] text-muted-dim mt-1">
+              Likely opposition: {e.fieldPreview.map(f => `${f.name} (${f.trainerName}, mark ${f.mark})`).join(" · ")}
+            </div>
+          )}
         </Card>
-      ) : g.slate.length ? (
+      ))}
+
+      {g.slate.length ? (
         <>
           <div className="font-mono px-3.5 pt-2.5 text-muted text-xs">Entries close soon — pick a race, or wait for a better slate.</div>
           {g.slate.map(r => (
@@ -75,7 +83,7 @@ function Upcoming({ g, yard, onEnterRace }: { g: GameState; yard: Yard; onEnterR
                 {yard.tracks.includes(r.course) && <b className="text-gold-800"> · home track</b>}
               </div>
               <div className="font-mono text-[11.5px] text-muted-dim">{COURSES[r.course].line}</div>
-              {g.horses.filter(h => h.injuryDays === 0).map(h => (
+              {g.horses.filter(h => h.injuryDays === 0 && !enteredHorseIds.has(h.id)).map(h => (
                 <Button key={h.id} className="mt-1.5 mr-1.5" onClick={() => onEnterRace(r, h.id)}>
                   ENTER {h.name.toUpperCase()} (mark {effRating(h)}{h.mark == null ? ", unrated" : ""})
                 </Button>
@@ -83,20 +91,27 @@ function Upcoming({ g, yard, onEnterRace }: { g: GameState; yard: Yard; onEnterR
             </Card>
           ))}
         </>
-      ) : (
+      ) : !g.entered.length ? (
         <div className="font-mono p-5 text-muted text-xs">No entries open today. The next slate comes up within a few days.</div>
-      )}
+      ) : null}
 
       <Card>
         <div className="font-mono font-bold tracking-wide mb-1.5">THE BIG-RACE CALENDAR — YEAR {g.year}</div>
         <div className="font-mono text-[11.5px] text-muted-dim mb-1.5">
-          The races careers are measured by. {yard.boss} controls the entries — bring a good enough horse and they&apos;ll let you take your shot.
+          {`The races careers are measured by. ${yard.boss} controls the entries — bring a good enough horse and they'll let you take your shot.`}
         </div>
         {CALENDAR.map(cr => {
           const best = g.horses.filter((h: Horse) => h.injuryDays === 0).sort((a, b) => effRating(b) - effRating(a))[0];
           const unlocked = best && effRating(best) >= cr.minOR - 2;
           const past = cr.day <= g.day;
           const inWindow = !past && cr.day - g.day <= 14 && cr.day - g.day >= 2;
+          // Classics are a scripted year-2+ storyline now (year 1 is normal
+          // build-up racing) — this calendar has its own manual DECLARE path
+          // separate from the scripted horse-choice trigger in story.ts, so
+          // it needs its own year gate or the year-2 requirement could just
+          // be sidestepped by declaring from here instead.
+          const tooEarly = cr.isClassic && g.year < 2;
+          const eligibleHorses = g.horses.filter(h => h.injuryDays === 0 && effRating(h) >= cr.minOR - 2 && !g.entered.some(e => e.horseId === h.id));
           return (
             <div key={cr.name} className={`py-2 border-t border-dotted border-parchment-line ${past ? "opacity-45" : ""}`}>
               <div className="flex justify-between items-baseline">
@@ -106,12 +121,16 @@ function Upcoming({ g, yard, onEnterRace }: { g: GameState; yard: Yard; onEnterR
               <div className="font-mono text-[11.5px] text-muted-dim">{cr.course} · {cr.dist}f · 1st {money(PRIZE[cr.grade][0])}</div>
               {past ? (
                 <div className="font-mono text-[11.5px] text-muted-dim">Run for this year — it comes around again next season.</div>
+              ) : tooEarly ? (
+                <div className="font-mono text-[11.5px] text-muted-dim">
+                  {`🔒 A Classic — ${yard.boss} won't enter a horse this green. Come back next year.`}
+                </div>
               ) : !unlocked ? (
                 <div className="font-mono text-[11.5px] text-muted-dim">
-                  {yard.boss} won&apos;t waste the entry: needs a horse around mark {cr.minOR}. Your best mark: {best ? effRating(best) : "—"}.
+                  {`${yard.boss} won't waste the entry: needs a horse around mark ${cr.minOR}. Your best mark: ${best ? effRating(best) : "—"}.`}
                 </div>
-              ) : inWindow && !g.entered ? (
-                g.horses.filter(h => h.injuryDays === 0 && effRating(h) >= cr.minOR - 2).map(h => (
+              ) : inWindow && eligibleHorses.length ? (
+                eligibleHorses.map(h => (
                   <PlanButton
                     key={h.id}
                     on={false}

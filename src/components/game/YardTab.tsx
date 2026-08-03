@@ -1,5 +1,6 @@
 import type { Yard } from "@/lib/sim";
 import { REPUTATION_TIER2_UNLOCK } from "@/lib/game/engine";
+import { metricRank } from "@/lib/game/ranks";
 import type { GameState, Milestones } from "@/lib/game/types";
 import { Card } from "@/components/ui/Card";
 import { StatBar } from "@/components/ui/StatBar";
@@ -24,20 +25,20 @@ export function YardTab({ g, yard }: { g: GameState; yard: Yard }) {
         <div className="font-mono font-bold tracking-wide mb-1.5">STANDING</div>
         <StatBar label="trust" value={g.trust} color="#c9a227" />
         <div className="font-mono text-[11.5px] text-muted-dim mb-2">
-          {yard.boss.split(" ")[0]}&apos;s private opinion of you — {g.trust >= 75 ? "they'd back you in public now" : g.trust >= 45 ? "you've earned real responsibility" : "still proving yourself"}. Moves on more than just results.
+          <b>{metricRank(g.trust)}.</b> {yard.boss.split(" ")[0]}&apos;s private opinion of you — {g.trust >= 75 ? "they'd back you in public now" : g.trust >= 45 ? "you've earned real responsibility" : "still proving yourself"}. Moves on more than just results.
         </div>
         <StatBar label="reputation" value={g.reputation} color="#0b3d91" />
         <div className="font-mono text-[11.5px] text-muted-dim mb-2">
-          What insiders — jockeys, other trainers, the handicapper — think of your ability. Lags results, weighted by grade.
+          <b>{metricRank(g.reputation)}.</b> What insiders — jockeys, other trainers, the handicapper — think of your ability. Lags results, weighted by grade.
           {g.reputation < REPUTATION_TIER2_UNLOCK && ` Reach ${REPUTATION_TIER2_UNLOCK} to unlock the bigger tracks.`}
         </div>
         <StatBar label="celebrity" value={g.celebrity} color="#7a1f5c" />
         <div className="font-mono text-[11.5px] text-muted-dim mb-2">
-          Public and media profile. Can pull against reputation — chasing headlines reads as showmanship to insiders.
+          <b>{metricRank(g.celebrity)}.</b> Public and media profile. Can pull against reputation — chasing headlines reads as showmanship to insiders.
         </div>
         <StatBar label="skill" value={g.skill} color="#1b7a43" />
         <div className="font-mono text-[11.5px] text-muted-dim">
-          Your own accumulated craft. Never falls — built from races run, course walks, and seasons survived, not just wins.
+          <b>{metricRank(g.skill)}.</b> Your own accumulated craft. Never falls — built from races run, course walks, and seasons survived, not just wins.
         </div>
       </Card>
       <Card>

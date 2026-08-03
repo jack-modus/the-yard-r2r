@@ -4,8 +4,20 @@ import type { CourseName, Horse, RaceCard, ScoredEntry } from "@/lib/sim";
 
 export type { FormLine } from "@/lib/sim";
 
+export interface FieldPreviewEntry {
+  name: string;
+  trainerName: string;
+  mark: number;
+}
+
 export interface EnteredRace extends RaceCard {
   horseId: number;
+  // A snapshot of likely opposition, drawn once at declare time (see
+  // engine.ts's enterRace) — indicative, not a guarantee of the actual field
+  // resolveRaceDay draws later, so the player has some visibility into the
+  // competition before committing without needing to lock in and thread an
+  // exact field all the way through to resolution.
+  fieldPreview: FieldPreviewEntry[];
 }
 
 export interface Message {
@@ -118,7 +130,7 @@ export interface GameState {
   mastery: Record<CourseName, number>;
   roster: Horse[]; // persistent circuit rivals — see lib/sim/roster.ts
   slate: RaceCard[];
-  entered: EnteredRace | null;
+  entered: EnteredRace[];
   results: RaceResultEntry[];
   queue: DecisionEvent[];
   flash: string[] | null;

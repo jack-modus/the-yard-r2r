@@ -28,9 +28,24 @@ function sampleFromBand(band: Grade, stat: ClassStat, used: Set<string>): Horse 
 
 export function makeRoster(used: Set<string>): Horse[] {
   const roster: Horse[] = [];
-  (Object.keys(CLASS_STATS) as (keyof typeof CLASS_STATS)[]).forEach(band => {
-    const stat = CLASS_STATS[band];
-    for (let i = 0; i < BAND_SIZE[band]; i++) roster.push(sampleFromBand(band, stat, used));
+  // Iterate BAND_ORDER, not Object.keys(CLASS_STATS) — Object.keys() always
+  // returns strings, even for numeric keys, so `band` would be "6" instead
+  // of 6 despite the type cast (a compile-time-only assertion that doesn't
+  // change the runtime value). h.rosterBand would then never strictly-equal
+  // a real numeric Grade (race.grade from makeSlate() is a genuine number),
+  // so eligibleForGrade() could never match any Class 3-6 roster horse —
+  // drawField()'s neighbour-widening fallback would silently walk all the
+  // way out to the Listed band (a real string key, so it "worked") for
+  // every ordinary race, pitting a fresh ~40-50 OR horse against ~90 OR
+  // opposition in what the UI still labelled "Class 6". Caught via a
+  // playtest report of a Class 6 declared race showing rivals rated in the
+  // 80s-90s — visible for the first time thanks to the fieldPreview feature
+  // built the same session. BAND_ORDER already carries the correct mixed
+  // number/string types, so reusing it as the single source of truth here
+  // fixes it without touching the comparison logic itself.
+  BAND_ORDER.forEach(band => {
+    const stat = CLASS_STATS[band as keyof typeof CLASS_STATS];
+    for (let i = 0; i < BAND_SIZE[band as keyof typeof BAND_SIZE]; i++) roster.push(sampleFromBand(band, stat, used));
   });
   return roster;
 }

@@ -3,9 +3,16 @@ import type { LiveRace } from "@/lib/game/types";
 import { COLUMN_PLAIN } from "@/components/ui/layout";
 import { TrackVisual } from "@/components/game/TrackVisual";
 
+const ORDINAL = (n: number) => {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+};
+
 export function LiveRaceOverlay({ liveRace, onNext }: { liveRace: LiveRace; onNext: () => void }) {
   const done = liveRace.idx + 1 >= liveRace.beats.length;
   const { track } = liveRace;
+  const mine = track.runners.find(r => r.player);
   return (
     <div className="fixed inset-0 bg-black/80 z-[32] flex items-center p-4">
       <div className={`${COLUMN_PLAIN} bg-ink-800 border-2 border-gold-500 rounded p-4 max-h-[85vh] overflow-y-auto`}>
@@ -25,6 +32,13 @@ export function LiveRaceOverlay({ liveRace, onNext }: { liveRace: LiveRace; onNe
         <TrackVisual track={track} idx={liveRace.idx} course={liveRace.course} dist={liveRace.dist} />
 
         <div className="text-[15.5px] leading-relaxed min-h-[90px] font-diary">{liveRace.beats[liveRace.idx]}</div>
+        {done && mine && (
+          <div className="text-center font-mono border-t-2 border-gold-500 mt-1 pt-2">
+            <span className="text-gold-300 text-lg font-bold tracking-wide">
+              FINISHED {ORDINAL(mine.pos)} OF {track.runners.length}
+            </span>
+          </div>
+        )}
         <Button className="block w-full mt-2.5 text-center text-sm" onClick={onNext}>
           {done ? "BACK TO THE YARD" : liveRace.idx >= 9 ? "THE FINISH →" : "▶"}
         </Button>

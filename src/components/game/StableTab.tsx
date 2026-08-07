@@ -1,4 +1,4 @@
-import { GEAR, GOINGS, OR } from "@/lib/sim";
+import { GEAR, GOINGS, OR, money } from "@/lib/sim";
 import type { GearId, Horse } from "@/lib/sim";
 import type { TrainingPlan } from "@/lib/game/types";
 import { Card } from "@/components/ui/Card";
@@ -35,10 +35,13 @@ export function StableTab({
           <Card key={h.id}>
             <div className="flex justify-between items-baseline">
               <span className="font-bold text-base">{h.name}</span>
-              <span className="font-mono font-bold text-sm">OR {OR(h)} · mark {h.mark ?? "unrated"}</span>
+              <span className="font-mono font-bold text-sm">TRUE {OR(h)} · OFFICIAL {h.mark ?? "unrated"}</span>
             </div>
             <div className="font-mono text-[11.5px] text-muted-dim">
               {h.colour} {h.sex} {h.age} ({h.sire} × {h.dam})
+            </div>
+            <div className="font-mono text-[10.5px] text-muted-dim mb-1.5">
+              TRUE is your own private read of its ability, from what you see in training — moves the moment its stats do. OFFICIAL is the mark it actually races off, set by the handicapper only after it runs.
             </div>
             <div className="font-mono text-[11.5px] text-muted-dim mb-1.5">
               Form: <b className="tracking-widest">{h.form.length ? [...h.form].reverse().join("") : "—"}</b>
@@ -49,7 +52,7 @@ export function StableTab({
             </div>
             {h.mark != null && h.mark !== OR(h) && (
               <div className="font-mono text-[11.5px] text-muted-dim mb-1.5 italic">
-                {h.mark < OR(h) ? "You suspect this horse is better than its mark — well handicapped." : "The mark may be flattering it slightly — a touch exposed."}
+                {h.mark < OR(h) ? "TRUE is above OFFICIAL — you suspect this horse is better than its mark. Well handicapped." : "TRUE is below OFFICIAL — the mark may be flattering it slightly. A touch exposed."}
               </div>
             )}
             {STAT_ROWS.map(([label, key, color]) => (
@@ -65,14 +68,14 @@ export function StableTab({
             <div className="font-mono text-[11.5px] text-muted-dim mt-1">
               gallop→speed · canter→stamina · sprints→accel · stalls→break · school→balance · sharp→a little of everything, gently · easy/rest→recover
             </div>
-            <div className="font-mono text-[11.5px] text-muted-dim mt-2 mb-0.5">GEAR (equip before you declare):</div>
+            <div className="font-mono text-[11.5px] text-muted-dim mt-2 mb-0.5">GEAR (equip before you declare — a fitting cost each time, refitting included):</div>
             <div className="flex gap-1 flex-wrap">
               {(Object.entries(GEAR) as [GearId, (typeof GEAR)[GearId]][]).map(([id, def]) => {
                 const on = (h.gear || []).includes(id);
                 const firstTime = on && !(h.gearRun || []).includes(id);
                 return (
                   <PlanButton key={id} on={on} onClick={() => onToggleGear(h.id, id)}>
-                    {def.label}
+                    {def.label}{on ? "" : ` (${money(def.cost)})`}
                     {firstTime ? " •1st" : ""}
                   </PlanButton>
                 );

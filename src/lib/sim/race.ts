@@ -78,8 +78,31 @@ export function runRace(race: RaceInput, entries: FieldEntry[], masteryMap: Reco
   }));
 }
 
+// Grade ladder, weakest to strongest — used only to cap how far above a
+// horse's actual race experience the slate is willing to offer (see
+// experienceCap below), independent of roster.ts's own identically-shaped
+// BAND_ORDER (not imported from there — roster.ts already imports from this
+// file, and reusing it here would create a cycle).
+const GRADE_ORDER: Grade[] = [6, 5, 4, 3, "L", "G3", "G2", "G1"];
+
+// A fresh, well-bred/lucky-picked starting horse's raw OR can already sit at
+// or past makeSlate's own Class 3/4 threshold before it's run a single race
+// — nothing previously gated the *slate* by anything but current stats, so
+// "too many hard races too early" wasn't really about opponent quality
+// (already fixed once, see roster.ts's makeRoster() bug-class note) so much
+// as the slate offering a class the player hadn't remotely earned yet.
+// Caught via playtesting feedback specifically calling out that an earlier
+// fix "may not have worked as intended" — that fix was roster.ts's, which
+// only ever addressed who you race against within a class, not which class
+// gets offered in the first place.
+function experienceCap(grade: Grade, runs: number): Grade {
+  const maxIdx = runs < 2 ? 1 : runs < 5 ? 3 : GRADE_ORDER.length - 1;
+  const idx = GRADE_ORDER.indexOf(grade);
+  return idx > maxIdx ? GRADE_ORDER[maxIdx] : grade;
+}
+
 // ---------- race slate ----------
-export function makeSlate(day: number, homeTracks: CourseName[], horseOR: number): RaceCard[] {
+export function makeSlate(day: number, homeTracks: CourseName[], horseOR: number, runs: number): RaceCard[] {
   const away = (Object.keys(COURSES) as CourseName[]).filter(c => !homeTracks.includes(c));
   const options: RaceCard[] = [];
   const mk = (course: CourseName, gradeBias?: Grade): RaceCard => {
@@ -90,6 +113,7 @@ export function makeSlate(day: number, homeTracks: CourseName[], horseOR: number
     else if (horseOR >= 76) grade = pick([3, 4, "L"] as const);
     else if (horseOR >= 62) grade = pick([4, 5] as const);
     else grade = pick([5, 6] as const);
+    grade = experienceCap(grade, runs);
     if (gradeBias) grade = gradeBias;
     return {
       id: nid(), course, dist: pick([5, 6, 7, 8, 10, 12, 14]),
@@ -107,6 +131,46 @@ export function makeSlate(day: number, homeTracks: CourseName[], horseOR: number
   // enough to hit this.
   if (away.length && Math.random() < 0.6) options.push(mk(pick(away)));
   return options;
+}
+
+// A rule-based, best-effort "why" for an underwhelming run — per playtesting
+// feedback that a bad result came with no explanation at all. Reads the same
+// sub-factors expected() already multiplies together, without touching
+// expected() itself (see CLAUDE.md "Tuned sim constants" — that formula is
+// calibrated against real data and isn't safe to perturb). Deliberately
+// only fires on a genuinely underwhelming run (outside the top 3, beaten by
+// a real margin) — a close-up defeat doesn't need an excuse. Picks the
+// single most negative factor, each compared against its own "this is
+// actually notable" baseline, rather than explaining every sub-factor at
+// once — a short, decisive line reads better than a hedge-everything
+// paragraph, and a trivial mismatch (a going 1 point off preference) losing
+// to noise shouldn't read as "the" reason a horse got beaten.
+export function diagnoseRun(h: Horse, race: RaceInput, res: ScoredEntry[], mine: ScoredEntry): string | null {
+  if (mine.pos <= 3 || mine.gap < 1.5) return null;
+
+  const c = COURSES[race.course];
+  const goingPen = Math.abs(h.prefGoing - race.going) * 0.06 - 0.07;
+  const distPen = (Math.abs(h.prefDist - race.dist) / race.dist) * 0.35 - 0.08;
+  const coursePen = c.sharpness * (1 - h.balance / 100) * 0.035 + c.undulation * (1 - h.balance / 100) * 0.03 - 0.05;
+  const climbPen = c.finishClimb * (1 - h.stamina / 100) * 0.04 - 0.025;
+  const fatPen = (h.fatigue / 100) * 0.22 - 0.1;
+  const fitnessPen = ((100 - h.fitness) / 100) * 0.25 - 0.12;
+  const others = res.filter(r => r.horse.id !== mine.horse.id);
+  const avgOtherExp = others.length ? others.reduce((sum, r) => sum + r.exp, 0) / others.length : mine.exp;
+  const classPen = avgOtherExp > 0 ? (avgOtherExp - mine.exp) / avgOtherExp - 0.05 : -1;
+
+  const candidates: [number, string][] = [
+    [goingPen, "didn't handle the ground today"],
+    [distPen, h.prefDist < race.dist ? "the trip stretched out further than it wants to go" : "this looked a shade sharp for it — never travelled"],
+    [coursePen, "never travelled comfortably around this track"],
+    [climbPen, "the finish caught it out — stamina found wanting up that climb"],
+    [fatPen, "still feeling the last race — needed fresher legs under it"],
+    [fitnessPen, "not fully wound up yet — needs more racing fitness"],
+    [classPen, "outclassed for this grade on the day"],
+  ];
+  candidates.sort((a, b) => b[0] - a[0]);
+  const [magnitude, reason] = candidates[0];
+  return magnitude > 0 ? reason : "no real excuse — the better horses were just closer today";
 }
 
 // Frank Berrow, Sonny Okafor, and Marina Delacroix-Hale are all previous

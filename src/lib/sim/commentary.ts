@@ -4,21 +4,62 @@
 // beat 11 the winner (and who chased), beat 12 the player's horse regardless of result.
 import { COURSES, GOINGS } from "./courses";
 import { marginStr } from "./format";
-import { clamp, pick, rnd } from "./utils";
+import { clamp, pick } from "./utils";
 import type { ScoredEntry } from "./types";
 
 export type Tactic = "front" | "stalk" | "hold";
+
+// Mirrors the beat count/shape used by makeBeats(): beat 0 is the stalls,
+// beats 10-11 (the finish and the immediate aftermath) both sit at the line.
+// Shared by both the text commentary and the live-race visual (see
+// computeFieldPositions below) — this is the "one clock" both read from.
+const BEAT_PROGRESS = [0, 0.08, 0.15, 0.3, 0.45, 0.55, 0.65, 0.8, 0.88, 0.96, 1, 1];
+
+// A single, shared per-runner per-beat ordinal rank (1 = leading) table —
+// the ONE source of truth for "where is everyone right now," read by both
+// makeBeats() (the prose) and computeRaceTrack() (the visual). Previously
+// each computed its own, independent, differently-shaped interpolation —
+// makeBeats() only ever tracked the player's own rank via a tactic-based
+// startPos, while computeRaceTrack() didn't track rank at all, just a final
+// X-position plus unrelated per-runner random wobble. The two could and did
+// disagree (commentary saying "sat mid-division" while the visual showed
+// last from the start) because nothing forced them to agree — this was
+// caught via playtesting feedback, not by any type/build check, since both
+// were individually well-formed code, just not driven by the same data.
+//
+// Every runner (not just the player) gets an interpolated rank from a
+// plausible early-race position toward their real final classification.
+// Rivals don't have a chosen tactic, so their "early position" is derived
+// deterministically from their own break stat (a fast-breaking horse is
+// more likely to race prominently early) rather than randomly — replay-safe
+// and, unlike the old per-runner noise, at least loosely grounded in the
+// same stat the text commentary's own break line already reads from.
+function startRankFor(entry: ScoredEntry, field: number, tactic: Tactic): number {
+  if (entry.player) return tactic === "front" ? 1 : tactic === "stalk" ? Math.min(3, field) : Math.max(2, field - 2);
+  const frac = 1 - clamp(entry.horse.brk, 20, 99) / 100; // fast break (high brk) -> near the front early
+  return clamp(Math.round(1 + frac * (field - 1)), 1, field);
+}
+
+export function computeFieldRanks(res: ScoredEntry[], tactic: Tactic): Record<number, number[]> {
+  const field = res.length;
+  const ranks: Record<number, number[]> = {};
+  res.forEach(entry => {
+    const start = startRankFor(entry, field, tactic);
+    ranks[entry.horse.id] = BEAT_PROGRESS.map(f => clamp(Math.round(start + (entry.pos - start) * f), 1, field));
+  });
+  return ranks;
+}
 
 export function makeBeats(
   race: { course: keyof typeof COURSES; dist: number; going: number },
   res: ScoredEntry[],
   mine: ScoredEntry,
   tactic: Tactic,
+  ranks: Record<number, number[]> = computeFieldRanks(res, tactic),
 ): string[] {
   const field = res.length;
   const winner = res[0], second = res[1] || res[0];
-  const startPos = tactic === "front" ? 1 : tactic === "stalk" ? Math.min(3, field) : Math.max(2, field - 2);
-  const posAt = (f: number) => clamp(Math.round(startPos + (mine.pos - startPos) * f), 1, field);
+  const myRanks = ranks[mine.horse.id];
   const H = mine.horse.name;
   const posLine = (p: number) =>
     p === 1 ? `${H} leads`
@@ -26,7 +67,9 @@ export function makeBeats(
     : p <= 4 ? `${H} tracks the leaders in ${p}th`
     : p <= Math.ceil(field / 2) ? `${H} is settled mid-division`
     : `${H} is held up toward the rear`;
-  const early = posAt(0.15), mid = posAt(0.45), threeOut = posAt(0.65), twoOut = posAt(0.8), oneOut = posAt(0.92);
+  // Indices into BEAT_PROGRESS/myRanks matching this function's own beat
+  // order below (early=1, mid=4, threeOut=6, twoOut=7, oneOut=8).
+  const early = myRanks[1], mid = myRanks[4], threeOut = myRanks[6], twoOut = myRanks[7], oneOut = myRanks[8];
   const otherEarly = res.find(r => !r.player && r.pos <= 3) || second;
   const looming = res.find(r => !r.player && r.pos <= 2) || winner;
   const brkLine = (mine.horse.brk >= 68 || tactic === "front")
@@ -61,9 +104,8 @@ export function makeBeats(
 // ---------- live race track (visual) ----------
 // A per-runner, per-beat X-progress curve (0 = stalls, 1 = finish line) for
 // the whole field — purely a presentation-layer fabrication, same trick
-// makeBeats()'s posAt() already uses for the player's own horse (a plausible
-// post-hoc interpolation toward the real final result), just extended to
-// every runner. Deliberately NOT touching runRace()/noiseSd() — that math is
+// makeBeats() uses (a plausible post-hoc interpolation toward the real final
+// result). Deliberately NOT touching runRace()/noiseSd() — that math is
 // calibrated against real data (see CLAUDE.md "Tuned sim constants") and has
 // no notion of intermediate field positions to begin with. Called once at
 // race resolution and the result stored on GameState, so there's no live
@@ -71,8 +113,9 @@ export function makeBeats(
 export interface RaceTrackRunner {
   name: string;
   silk: string;
-  number: number;
+  number: number; // racecard number — from a randomized stall draw, not lane/id order
   player: boolean;
+  pos: number; // final finishing position, for a guaranteed "you finished Nth" readout
   positions: number[]; // one per beat, 0-1
 }
 
@@ -80,23 +123,21 @@ export interface RaceTrack {
   runners: RaceTrackRunner[];
 }
 
-// Mirrors the beat count/shape from makeBeats(): beat 0 is the stalls,
-// beats 10-11 (the finish and the immediate aftermath) both sit at the line.
-const BEAT_PROGRESS = [0, 0.08, 0.15, 0.3, 0.45, 0.55, 0.65, 0.8, 0.88, 0.96, 1, 1];
-
 export function computeRaceTrack(res: ScoredEntry[], mine: ScoredEntry, tactic: Tactic): RaceTrack {
   const field = res.length;
-  // Stable lane order, independent of finishing result — the eye reads
-  // "who's ahead" purely from X-position, so lane order never spoils the
-  // outcome before the finish plays out.
-  const laned = [...res].sort((a, b) => a.horse.id - b.horse.id);
+  const ranks = computeFieldRanks(res, tactic);
 
-  // Reuse the same closing/fading signal makeBeats() derives for the
-  // player's own horse, so this doesn't visually contradict a line like
-  // "CLOSING with every stride!" sitting right next to it.
-  const startPos = tactic === "front" ? 1 : tactic === "stalk" ? Math.min(3, field) : Math.max(2, field - 2);
-  const posAt = (f: number) => clamp(Math.round(startPos + (mine.pos - startPos) * f), 1, field);
-  const closing = posAt(0.92) > mine.pos;
+  // A genuine stall draw — randomized per race, not derived from horse.id
+  // (which used to put the player's horse in lane/stall 1 almost every
+  // single race, since its id is always low: it's created before the whole
+  // roster). Caught via playtesting feedback ("stall draw is always the
+  // same"). Lane order is otherwise cosmetic — the eye reads "who's ahead"
+  // from X-position, not lane, so shuffling it never spoils the outcome.
+  const laned = [...res];
+  for (let i = laned.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [laned[i], laned[j]] = [laned[j], laned[i]];
+  }
 
   const spreadStep = field > 1 ? Math.min(0.035, 0.35 / (field - 1)) : 0;
   const runners: RaceTrackRunner[] = laned.map((entry, i) => {
@@ -104,20 +145,29 @@ export function computeRaceTrack(res: ScoredEntry[], mine: ScoredEntry, tactic: 
     // so a big field's tail-ender still reads as "in the race," not
     // stranded back near the stalls.
     const finalX = entry.pos === 1 ? 1 : clamp(1 - (entry.pos - 1) * spreadStep, 0.65, 1);
-    // A little per-runner jockeying-for-position wobble, zero at the start
-    // and finish (everyone's exactly in the stalls, everyone ends exactly
-    // where they finished) and peaking mid-race.
-    const amplitude = entry.player ? (closing ? 0.07 : -0.05) : rnd(-0.08, 0.08);
-    const positions = BEAT_PROGRESS.map(p => {
+    const myRanks = ranks[entry.horse.id];
+    const positions = BEAT_PROGRESS.map((p, beatIdx) => {
       if (p <= 0) return 0;
       if (p >= 1) return finalX;
-      return clamp(p * finalX + amplitude * Math.sin(p * Math.PI), 0, 1);
+      // The SAME rank driving the text commentary offsets this runner
+      // ahead of or behind the field's nominal race progress at this beat —
+      // a runner currently well-placed reads as ahead of the pack, one
+      // currently buried reads as behind it, and everyone still lands
+      // exactly on their real final X by the finish (wobbleShape -> 0).
+      // Previously this was uncorrelated random noise per non-player
+      // runner, which is exactly how the commentary and the visual could
+      // (and did) disagree about where a horse was mid-race.
+      const rank = myRanks[beatIdx];
+      const rankFrac = (rank - (field + 1) / 2) / field; // negative = ahead of mid-pack
+      const wobbleShape = Math.sin(p * Math.PI); // 0 at start/finish, peak mid-race
+      return clamp(p * finalX - rankFrac * 0.16 * wobbleShape, 0, 1);
     });
     return {
       name: entry.horse.name,
       silk: entry.silk ?? "#666666",
       number: i + 1,
       player: entry.player,
+      pos: entry.pos,
       positions,
     };
   });

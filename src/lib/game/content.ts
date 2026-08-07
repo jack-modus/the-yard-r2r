@@ -5,6 +5,8 @@ import { YARD } from "@/lib/sim";
 import type { Yard } from "@/lib/sim";
 import { note, withHorse } from "./stateUtils";
 import { makeClassicCallback } from "./storyContent";
+import { pickFresh } from "./variety";
+import { makeVetBillDecision } from "./vetBills";
 import type { DecisionEvent, GameState } from "./types";
 
 export const QUIET_DAYS = [
@@ -18,38 +20,52 @@ export const QUIET_DAYS = [
   "A visiting owner tours the yard. Lots of nodding. Your horse behaves, mostly.",
 ];
 
-export function trainingMoment(s: GameState): DecisionEvent | null {
+// Fixed at the true count of templates below (16 base + 1 conditional
+// classic-callback slot) — see variety.ts for why this needs to roughly
+// match the real pool size rather than being an arbitrary cooldown window.
+export const TRAINING_POOL_SIZE = 17;
+
+export function trainingMoment(s: GameState, recent: string[] = []): DecisionEvent | null {
   const fit = s.horses.filter(h => h.injuryDays === 0);
   if (!fit.length) return null;
   const h = pick(fit);
   const yard = YARD;
   const templates: DecisionEvent[] = [
     {
+      id: "fresh-morning",
       title: `${h.name} is fresh this morning`,
       tag: "TRAINING",
       text: `Bucking and squealing on the walk out — the horse is jumping out of its skin. Let it have a proper blow-out, or keep the lid on?`,
       choices: [
         { label: "Let it stretch out", hint: "+speed · +fatigue · small strain risk", apply: st => {
           let n = withHorse(st, h.id, x => ({ ...x, speed: clamp(x.speed + 1.5, 0, 99), fatigue: clamp(x.fatigue + 8, 0, 100) }));
-          if (Math.random() < 0.12) { n = withHorse(n, h.id, x => ({ ...x, injuryDays: ri(4, 10) })); n = note(n, `${h.name} came back with heat in a joint. A spell on the easy list.`); }
-          else n = note(n, `${h.name} worked with real zest. Sharper for it.`);
+          if (Math.random() < 0.12) {
+            const days = ri(4, 10);
+            n = withHorse(n, h.id, x => ({ ...x, injuryDays: days }));
+            n = note(n, `${h.name} came back with heat in a joint. A spell on the easy list.`);
+            n = { ...n, queue: [...n.queue, makeVetBillDecision(n, h.id, h.name, days)] };
+          } else n = note(n, `${h.name} worked with real zest. Sharper for it.`);
           return n;
         } },
         { label: "Keep it settled", hint: "+morale, nothing risked", apply: st => note(withHorse(st, h.id, x => ({ ...x, morale: clamp(x.morale + 3, 0, 100) })), `${h.name} settles into steady work. A good, calm morning.`) },
       ],
     },
     {
+      id: "stalls-practice",
       title: "Stalls practice?",
       tag: "TRAINING",
       text: `${h.name} has been slow into stride. A morning at the practice stalls could fix the break — with the usual small risk of a knock in there.`,
       choices: [
-        { label: "School in the stalls", hint: "+break · small knock risk (days off)", apply: st => Math.random() < 0.1
-          ? note(withHorse(st, h.id, x => ({ ...x, injuryDays: 3 })), `${h.name} banged a knee in the gates. A few days off.`)
-          : note(withHorse(st, h.id, x => ({ ...x, brk: clamp(x.brk + 2.5, 0, 99) })), `${h.name} pings the gates all morning. The break is sharper.`) },
+        { label: "School in the stalls", hint: "+break · small knock risk (days off)", apply: st => {
+          if (Math.random() >= 0.1) return note(withHorse(st, h.id, x => ({ ...x, brk: clamp(x.brk + 2.5, 0, 99) })), `${h.name} pings the gates all morning. The break is sharper.`);
+          const n = note(withHorse(st, h.id, x => ({ ...x, injuryDays: 3 })), `${h.name} banged a knee in the gates. A few days off.`);
+          return { ...n, queue: [...n.queue, makeVetBillDecision(n, h.id, h.name, 3)] };
+        } },
         { label: "Not today", hint: "no change", apply: st => st },
       ],
     },
     {
+      id: "boss-stops-by",
       title: `${yard.boss} stops by your box`,
       tag: "BOSS",
       text: `${yard.boss} leans on the door and watches you work for a long minute. "Tell me your plan for this one." Do you talk targets or talk process?`,
@@ -59,6 +75,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
       ],
     },
     {
+      id: "lead-horse-work",
       title: "Work upsides the stable star",
       tag: "TRAINING",
       text: `The head lad offers you a lead horse for a serious piece of work. It'll build ${h.name} up — and take something out of the horse today.`,
@@ -68,6 +85,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
       ],
     },
     {
+      id: "going-theory",
       title: `A theory about ${h.name}`,
       tag: "TRAINING",
       text: `Watching the horse move on ${h.prefGoing >= 3 ? "rain-softened" : "quick"} ground this morning, you have a hunch about its going preference. Test it with a searching piece of work?`,
@@ -77,6 +95,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
       ],
     },
     {
+      id: "local-paper",
       title: "The local paper wants a word",
       tag: "PRESS",
       text: `A reporter's on the phone chasing a line about ${h.name} for the weekend edition. ${yard.boss} leaves it to you — but insiders notice a trainer who's always chasing headlines.`,
@@ -86,6 +105,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
       ],
     },
     {
+      id: "sales-tip",
       title: "A tip, for what it's worth",
       tag: "YARD",
       text: `An old jockey's agent corners you at the sales ground, half a pint deep, keen to share a theory about ${h.name}. Some of it's nonsense. Some of it might not be.`,
@@ -95,6 +115,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
       ],
     },
     {
+      id: "neighbour-trainer",
       title: "Another trainer, over the fence",
       tag: "YARD",
       text: `A trainer from a neighbouring yard leans on the rail while your string cools off, in the mood to talk shop. "How's yours shaping up, then?" It's the kind of question that's really an invitation to compare notes.`,
@@ -104,6 +125,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
       ],
     },
     {
+      id: "camera-crew",
       title: "A camera crew in the yard",
       tag: "PRESS",
       text: `A regional TV crew turns up unannounced, doing a piece on "the next generation of British racing" — someone in the press office clearly gave them your name. They want thirty seconds, on camera, right now.`,
@@ -113,6 +135,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
       ],
     },
     {
+      id: "yard-cat",
       title: "The yard cat has opinions",
       tag: "YARD",
       text: `The yard cat — nobody remembers hiring it, it simply arrived one winter and stayed — has taken to sitting in ${h.name}'s doorway every morning and refusing to move. The lads have started calling it a good omen. You're not sure a cat can have opinions about a racehorse, but you've been wrong before.`,
@@ -122,6 +145,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
       ],
     },
     {
+      id: "moon-system",
       title: "A system that cannot fail", tag: "YARD",
       text: `A man at the sales ground corners you with a betting "system" involving the phases of the moon, ${h.name}'s coat colour, and — he's very insistent about this part — the number of vowels in the racecourse's name. He has charts. He has a whole ring binder of charts.`,
       choices: [
@@ -130,6 +154,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
       ],
     },
     {
+      id: "sausage-sponsor",
       title: "A sponsorship enquiry, sort of", tag: "PRESS",
       text: `A local sausage company wants to sponsor ${h.name}'s next race — a modest cash sum in exchange for "Bridges' Bangers" getting a mention in the racecard. It is, by some distance, the least dignified offer the yard has ever received.`,
       choices: [
@@ -138,6 +163,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
       ],
     },
     {
+      id: "apprentice-advice",
       title: "The apprentice wants advice", tag: "TRAINING",
       text: `A stable apprentice, all of seventeen and painfully earnest, asks if you have "any tips for making it" in this game. You remember being asked the same thing roughly never, because you were the one asking it a few years back.`,
       choices: [
@@ -146,6 +172,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
       ],
     },
     {
+      id: "radio-phonein",
       title: "A radio phone-in wants a word", tag: "PRESS",
       text: `A local radio host wants you live on air for "sixty seconds on the state of the yard." His first question is whether ${h.name} is "the next big thing." His second question, before you can answer the first, is also whether ${h.name} is "the next big thing."`,
       choices: [
@@ -154,6 +181,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
       ],
     },
     {
+      id: "lucky-headcollar",
       title: "A lucky headcollar", tag: "YARD",
       text: `One of the lads swears ${h.name} only works well in a specific, extremely battered headcollar that is, by any objective measure, falling apart. He's threatening to quit if you make him use the new one.`,
       choices: [
@@ -162,6 +190,7 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
       ],
     },
     {
+      id: "budgerigar-owner",
       title: "An owner's very specific request", tag: "YARD",
       text: `A prospective owner rings the yard, keen to get involved — on the condition that any future horse be named after his late budgerigar, Sir Reginald Featherstonehaugh III. ${yard.boss} takes the call in stony silence and hands you the phone without a word of warning.`,
       choices: [
@@ -171,9 +200,9 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
     },
   ];
   if (s.story.classicResults.length > 0) {
-    templates.push(makeClassicCallback(s.story.classicResults[s.story.classicResults.length - 1]));
+    templates.push({ ...makeClassicCallback(s.story.classicResults[s.story.classicResults.length - 1]), id: "classic-callback" });
   }
-  return pick(templates);
+  return pickFresh(templates, recent);
 }
 
 export const NEWS_LINES = (yard: Yard, courseNames: string[]) => [

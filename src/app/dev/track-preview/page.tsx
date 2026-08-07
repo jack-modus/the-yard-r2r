@@ -24,7 +24,7 @@ function mockTrack(finishOrder: number[], playerIdx: number, seed: number): Race
     const positions = BEAT_PROGRESS.map(p =>
       p <= 0 ? 0 : p >= 1 ? finalX : Math.min(1, Math.max(0, p * finalX + amplitude * Math.sin(p * Math.PI))),
     );
-    return { name: `Horse ${i + 1}`, silk: SILKS[i % SILKS.length], number: i + 1, player: i === playerIdx, positions };
+    return { name: `Horse ${i + 1}`, silk: SILKS[i % SILKS.length], number: i + 1, player: i === playerIdx, pos: finishPos, positions };
   });
   return { runners };
 }

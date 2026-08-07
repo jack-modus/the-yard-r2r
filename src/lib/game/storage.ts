@@ -8,7 +8,7 @@
 // line of defence in case a bump gets forgotten.
 import type { GameState } from "./types";
 
-const KEY = "the-yard:rags-to-riches:v5"; // v5: quizCount/quizMissed, pressRoomUsed/pressRoomFollowupDay, Horse.statCeilings all added
+const KEY = "the-yard:rags-to-riches:v6"; // v6: yardUpgrades, eventHistory added
 
 type SerializedState = Omit<GameState, "usedNames"> & { usedNames: string[] };
 
@@ -21,6 +21,8 @@ function looksLikeCurrentShape(parsed: unknown): parsed is SerializedState {
     Array.isArray(p.entered) &&
     Array.isArray(p.quizMissed) &&
     typeof p.pressRoomUsed === "object" && p.pressRoomUsed !== null &&
+    typeof p.yardUpgrades === "object" && p.yardUpgrades !== null &&
+    typeof p.eventHistory === "object" && p.eventHistory !== null &&
     typeof p.story === "object" && p.story !== null &&
     typeof (p.story as Record<string, unknown>).stage === "string"
   );

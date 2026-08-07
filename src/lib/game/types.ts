@@ -67,6 +67,10 @@ export interface DecisionEvent {
   text: string;
   choices: Choice[];
   tag?: DecisionTag;
+  // Stable slug for flavour-pool variety tracking only (lib/game/variety.ts)
+  // — which recent picks to avoid re-selecting immediately. Not used by any
+  // game logic; scripted/one-off DecisionEvents can safely omit it.
+  id?: string;
 }
 
 export interface LiveRace {
@@ -158,4 +162,15 @@ export interface GameState {
   // has to survive JSON.stringify for localStorage.
   pressRoomUsed: Record<string, boolean>;
   pressRoomFollowupDay: number | null;
+
+  // One-time yard purchases (lib/game/upgrades.ts) — permanent effects once
+  // bought, keyed by YardUpgradeId. See CLAUDE.md "Money sinks" for the catalog.
+  yardUpgrades: Record<string, boolean>;
+
+  // Flavour-pool variety tracking (lib/game/variety.ts) — per category
+  // (e.g. "training", "preRacePress"), the most recently shown DecisionEvent
+  // ids, so pick() selection avoids immediate repeats without needing a
+  // fixed enumerable schedule. Purely cosmetic bookkeeping, never read by
+  // any win/loss logic.
+  eventHistory: Record<string, string[]>;
 }

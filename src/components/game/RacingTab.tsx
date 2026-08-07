@@ -4,6 +4,7 @@ import {
 } from "@/lib/sim";
 import type { Horse, RaceCard, Yard } from "@/lib/sim";
 import type { GameState } from "@/lib/game/types";
+import { entryFee } from "@/lib/game/engine";
 import { Card } from "@/components/ui/Card";
 import { PlanButton } from "@/components/ui/PlanButton";
 import { Button } from "@/components/ui/Button";
@@ -85,7 +86,7 @@ function Upcoming({ g, yard, onEnterRace }: { g: GameState; yard: Yard; onEnterR
               <div className="font-mono text-[11.5px] text-muted-dim">{COURSES[r.course].line}</div>
               {g.horses.filter(h => h.injuryDays === 0 && !enteredHorseIds.has(h.id)).map(h => (
                 <Button key={h.id} className="mt-1.5 mr-1.5" onClick={() => onEnterRace(r, h.id)}>
-                  ENTER {h.name.toUpperCase()} (mark {effRating(h)}{h.mark == null ? ", unrated" : ""})
+                  ENTER {h.name.toUpperCase()} (mark {effRating(h)}{h.mark == null ? ", unrated" : ""} · fee {money(entryFee(r.grade))})
                 </Button>
               ))}
             </Card>
@@ -139,7 +140,7 @@ function Upcoming({ g, yard, onEnterRace }: { g: GameState; yard: Yard; onEnterR
                       grade: cr.grade, raceDay: cr.day, name: `${cr.name} (${cr.grade})`, isClassic: cr.isClassic,
                     }, h.id)}
                   >
-                    DECLARE {h.name.toUpperCase()}
+                    DECLARE {h.name.toUpperCase()} (fee {money(entryFee(cr.grade))})
                   </PlanButton>
                 ))
               ) : (

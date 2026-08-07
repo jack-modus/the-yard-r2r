@@ -5,16 +5,21 @@
 import {
   CMT_ALSO, CMT_PLACE, CMT_WIN,
   COURSES, GEAR, GOINGS, OR, PRIZE, YARD,
-  clamp, computeRaceTrack, drawField, effRating, makeBeats, makeCandidateHorses, makeHorse, makeRoster, makeSlate,
-  pick, ri, runRace,
+  clamp, computeRaceTrack, diagnoseRun, drawField, effRating, makeBeats, makeCandidateHorses, makeHorse, makeRoster, makeSlate,
+  money, pick, ri, runRace,
 } from "@/lib/sim";
-import type { CourseName, Grade, Horse, RaceCard } from "@/lib/sim";
+import type { CourseName, GearId, Grade, Horse, RaceCard } from "@/lib/sim";
 import type { Tactic } from "@/lib/sim/commentary";
-import { NEWS_LINES, QUIET_DAYS, trainingMoment } from "./content";
+import { NEWS_LINES, QUIET_DAYS, TRAINING_POOL_SIZE, trainingMoment } from "./content";
 import { quizMoment } from "./quiz";
 import { applyPerceptionOverflow, checkThresholds } from "./metrics";
-import { makePostRacePress, makePreRacePress } from "./pressContent";
+import {
+  makePostRacePress, makePreRacePress, POST_RACE_LOSS_POOL_SIZE, POST_RACE_WIN_POOL_SIZE, PRE_RACE_POOL_SIZE,
+} from "./pressContent";
 import { makeRivalClapback } from "./pressRoom";
+import { makeVetBillDecision } from "./vetBills";
+import { RECOVERY_REDUCTION, TRAVEL_CASH_BONUS } from "./upgrades";
+import { recordSeen } from "./variety";
 import {
   BEAT2_BRIDGES_OFFICE, BEAT5_REPORTER_PRE_RACE, BEAT6_MCLEAN_TAUNT, classicScratchedMessage, makeNewHorseAnnouncement,
 } from "./storyContent";
@@ -22,7 +27,7 @@ import {
   checkStoryTriggers, computeEnding, ensureNemesisInField, forcePosition, newStoryState, rescheduleDiamondCup,
   resolveClassicOutcome, resolveDiamondCupOutcome, scheduleNemesisIntro, skipClassic,
 } from "./story";
-import { note } from "./stateUtils";
+import { note, withHorse } from "./stateUtils";
 import { unlockedCourses } from "./tracks";
 import type { GameState, TrainingPlan } from "./types";
 
@@ -32,6 +37,13 @@ export { REPUTATION_TIER2_UNLOCK, unlockedCourses } from "./tracks";
 // more than a Class 6, unlike Trust which doesn't care about grade at all.
 const GRADE_WEIGHT: Record<string, number> = { G1: 18, G2: 13, G3: 9, L: 6, "3": 4, "4": 3, "5": 2, "6": 1 };
 const gradeWeight = (grade: Grade) => GRADE_WEIGHT[String(grade)] ?? 1;
+
+// A real, non-refundable cost to declaring — the yard's flavour text has
+// always implied one ("Costs us the entry fee, mind" on withdrawal) but
+// nothing actually charged it. ~1.5% of the grade's 1st-place prize,
+// rounded to the nearest £5 — a judgement call, not calibrated against
+// anything. See CLAUDE.md "Money sinks".
+export const entryFee = (grade: Grade) => Math.max(15, Math.round(PRIZE[grade][0] * 0.015 / 5) * 5);
 
 const PLAYER_NAME = "Tony Vincenzo";
 // "Bigger than the Breeders' Cup" — real Breeders' Cup Classic purses run
@@ -55,6 +67,7 @@ export function newGame(used: Set<string>): GameState {
     ending: null,
     quizCount: 0, quizMissed: [],
     pressRoomUsed: {}, pressRoomFollowupDay: null,
+    yardUpgrades: {}, eventHistory: {},
   };
 }
 
@@ -80,10 +93,11 @@ export function resolveRaceDay(st: GameState, tactic: Tactic, raceId: number): G
   const horses = st.horses.map(h => ({ ...h }));
   const me = horses.find(h => h.id === race.horseId)!;
   const msgs: { day: number; text: string }[] = [];
+  const eventHistory: GameState["eventHistory"] = { ...st.eventHistory };
   const trustBefore = st.trust, reputationBefore = st.reputation, celebrityBefore = st.celebrity;
   let trust = st.trust, cash = st.cash;
   let reputation = st.reputation, celebrity = st.celebrity;
-  let skill = clamp(st.skill + 3, 0, 100); // racing teaches you something regardless of result
+  let skill = st.skill; // see the result-scaled gain applied once `mine` is known, below
   const mastery = { ...st.mastery };
   const milestones = { ...st.milestones };
   let results = st.results;
@@ -115,6 +129,18 @@ export function resolveRaceDay(st: GameState, tactic: Tactic, raceId: number): G
   let res = runRace(race, field, mastery);
   if (forcingNemesis && story.scriptedFirstRaceLoss) res = forcePosition(res, nemesisHorse!.id, 1);
   const mine = res.find(r => r.player)!;
+  // Skill growth tied to what actually happened, not a flat rate every race
+  // regardless of result — per playtesting feedback that Skill hit "Elite"
+  // after 40 days with zero wins. Same diminishing-approach shape as before
+  // (see "Training ceilings..." below), just a result-scaled base instead of
+  // a constant +3. Classics/Diamond Cup layer their own outcome.skill on top
+  // of this below, unchanged.
+  const resultSkillGain = mine.pos === 1 ? 7 : mine.pos <= 3 ? 4.5 : mine.gap < 2 ? 2.5 : 1;
+  skill = clamp(Math.round((skill + resultSkillGain * (1 - skill / 100)) * 10) / 10, 0, 100);
+  // One-time milestone bonuses, same diminishing shape — a first winner or a
+  // first Group 1 should visibly move Skill on top of the ordinary
+  // result-scaled gain above, reinforcing "tied to results" further.
+  const bumpSkill = (n: number) => { skill = clamp(Math.round((skill + n * (1 - skill / 100)) * 10) / 10, 0, 100); };
 
   const rivalIdSet = new Set(rivals.map(r => r.horse.id));
   const roster = st.roster.map(h => {
@@ -154,7 +180,7 @@ export function resolveRaceDay(st: GameState, tactic: Tactic, raceId: number): G
   // "Biggest prize money in the world, more than the Breeders' Cup" — a
   // one-off purse well outside the ordinary PRIZE table, not tied to grade.
   const prize = race.isDiamondCup ? (DIAMOND_CUP_PRIZE[mine.pos - 1] || 0) : (PRIZE[race.grade][mine.pos - 1] || 0);
-  me.earnings += prize; cash += Math.round(prize * 0.08);
+  me.earnings += prize; cash += Math.round(prize * (0.08 + (st.yardUpgrades.travel ? TRAVEL_CASH_BONUS : 0)));
   const cmt = mine.pos === 1 ? pick(CMT_WIN) : mine.pos <= 3 ? pick(CMT_PLACE) : pick(CMT_ALSO);
   me.formLines = [{ day: st.day, year: st.year, race: race.name, course: race.course, dist: race.dist, going: GOINGS[race.going], pos: mine.pos, of: res.length, sp: mine.sp, cmt }, ...me.formLines].slice(0, 12);
   me.form = [mine.pos > 9 ? 0 : mine.pos, ...me.form].slice(0, 6);
@@ -188,6 +214,7 @@ export function resolveRaceDay(st: GameState, tactic: Tactic, raceId: number): G
     msgs.push({ day: st.day, text: outcome.message });
     if (mine.pos === 1) {
       me.wins++; me.morale = clamp(me.morale + 10, 0, 100);
+      if (!milestones.g1Win) bumpSkill(12);
       milestones.g1Win = true; milestones.groupWin = true;
     } else if (mine.pos > res.length - 2) {
       me.morale = clamp(me.morale - 4, 0, 100);
@@ -206,7 +233,8 @@ export function resolveRaceDay(st: GameState, tactic: Tactic, raceId: number): G
     msgs.push({ day: st.day, text: outcome.message });
     if (mine.pos === 1) {
       me.wins++; me.morale = clamp(me.morale + 10, 0, 100);
-      if (!milestones.firstWin) { milestones.firstWin = true; msgs.push({ day: st.day, text: `Your first winner as an assistant. The head lad shakes your hand. It starts here.` }); }
+      if (!milestones.firstWin) { milestones.firstWin = true; bumpSkill(8); msgs.push({ day: st.day, text: `Your first winner as an assistant. The head lad shakes your hand. It starts here.` }); }
+      if (!milestones.g1Win) bumpSkill(12);
       milestones.g1Win = true; milestones.groupWin = true;
     } else if (mine.pos > res.length - 2) {
       me.morale = clamp(me.morale - 4, 0, 100);
@@ -219,10 +247,10 @@ export function resolveRaceDay(st: GameState, tactic: Tactic, raceId: number): G
       if (race.grade === "G1") { celebrity = celebrity + 10; msgs.push({ day: st.day, text: `The racing press is all over this one — a Group 1 winner from the bottom box makes a story too good to ignore.` }); }
       else if (race.grade === "G2") celebrity = celebrity + 5;
       msgs.push({ day: st.day, text: `${me.name} WINS the ${race.name}! ${pick(yard.praise)}` });
-      if (!milestones.firstWin) { milestones.firstWin = true; msgs.push({ day: st.day, text: `Your first winner as an assistant. The head lad shakes your hand. It starts here.` }); }
-      if (race.grade === "L" && !milestones.listedWin) milestones.listedWin = true;
-      if ((race.grade === "G3" || race.grade === "G2") && !milestones.groupWin) milestones.groupWin = true;
-      if (race.grade === "G1" && !milestones.g1Win) milestones.g1Win = true;
+      if (!milestones.firstWin) { milestones.firstWin = true; bumpSkill(8); msgs.push({ day: st.day, text: `Your first winner as an assistant. The head lad shakes your hand. It starts here.` }); }
+      if (race.grade === "L" && !milestones.listedWin) { milestones.listedWin = true; bumpSkill(6); }
+      if ((race.grade === "G3" || race.grade === "G2") && !milestones.groupWin) { milestones.groupWin = true; bumpSkill(8); }
+      if (race.grade === "G1" && !milestones.g1Win) { milestones.g1Win = true; bumpSkill(12); }
     } else if (mine.pos <= 3) {
       reputation = reputation + Math.max(1, Math.round(gw / 3));
       msgs.push({ day: st.day, text: `${me.name} finishes ${mine.pos} of ${res.length}. Plenty to build on.` });
@@ -233,6 +261,12 @@ export function resolveRaceDay(st: GameState, tactic: Tactic, raceId: number): G
         msgs.push({ day: st.day, text: `Well beaten. ${pick(yard.scold)}` });
       } else msgs.push({ day: st.day, text: `${me.name} finishes ${mine.pos} of ${res.length}. Back to the drawing board.` });
       me.morale = clamp(me.morale - (mine.pos > 5 ? 4 : 0), 0, 100);
+      // A guaranteed "why" for an underwhelming run — diagnoseRun() itself
+      // only returns non-null outside the top 3 with a real margin, so this
+      // never fires alongside "Plenty to build on" above. Ordinary races
+      // only; the Classics/Diamond Cup already narrate their own outcomes.
+      const diagnosis = diagnoseRun(me, race, res, mine);
+      if (diagnosis) msgs.push({ day: st.day, text: `Notebook: ${diagnosis}.` });
     }
   }
 
@@ -307,11 +341,15 @@ export function resolveRaceDay(st: GameState, tactic: Tactic, raceId: number): G
   // Post-race press for ordinary races only — the Classics/Diamond Cup/
   // nemesis arc already have their own dedicated reaction content.
   if (!race.isClassic && !race.isDiamondCup && Math.random() < 0.35) {
-    queueExtra = [...queueExtra, makePostRacePress(me.name, race.name, mine.pos === 1)];
+    const won = mine.pos === 1;
+    const poolKey = won ? "postRacePressWin" : "postRacePressLoss";
+    const postRace = makePostRacePress(me.name, race.name, won, eventHistory[poolKey] ?? []);
+    if (postRace.id) eventHistory[poolKey] = recordSeen(eventHistory[poolKey] ?? [], postRace.id, won ? POST_RACE_WIN_POOL_SIZE : POST_RACE_LOSS_POOL_SIZE);
+    queueExtra = [...queueExtra, postRace];
   }
   results = [{ race, res, mine, cmt }, ...results].slice(0, 30);
   return {
-    ...st, horses, roster, trust, cash, reputation, celebrity, skill, mastery, milestones, results,
+    ...st, horses, roster, trust, cash, reputation, celebrity, skill, mastery, milestones, results, eventHistory,
     entered: st.entered.filter(r => r.id !== raceId), story, ending,
     queue: [...st.queue, ...queueExtra],
     liveRace: {
@@ -336,6 +374,7 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
   let slate = s.slate;
   let queue: GameState["queue"] = [];
   let entered = s.entered;
+  const eventHistory: GameState["eventHistory"] = { ...s.eventHistory };
   let story = s.story;
 
   // --- going update, a few days out: weather can turn a declared race against
@@ -401,7 +440,9 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
     } else if (!e.isClassic && !e.isDiamondCup && Math.random() < 0.4) {
       // Pre-race press for ordinary races — the scripted nemesis race and
       // the Classics/Diamond Cup already get their own dedicated press beats.
-      queue = [...queue, makePreRacePress(me.name, e.name), tacticsEvent];
+      const preRace = makePreRacePress(me.name, e.name, eventHistory.preRacePress ?? []);
+      if (preRace.id) eventHistory.preRacePress = recordSeen(eventHistory.preRacePress ?? [], preRace.id, PRE_RACE_POOL_SIZE);
+      queue = [...queue, preRace, tacticsEvent];
     } else {
       queue = [...queue, tacticsEvent];
     }
@@ -480,18 +521,24 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
       );
     }
     if (["gallop", "sprints"].includes(p) && Math.random() < 0.02 + (h.fatigue / 100) * 0.05) {
-      h.injuryDays = ri(3, 9);
+      const days = Math.max(1, Math.round(ri(3, 9) * (s.yardUpgrades.recovery ? 1 - RECOVERY_REDUCTION : 1)));
+      h.injuryDays = days;
       msgs.push({ day: s.day, text: `${h.name} pulled up short on the gallops — ${h.injuryDays} days on the easy list.` });
+      queue = [...queue, makeVetBillDecision(s, h.id, h.name, days)];
     }
   });
   // Skill is an XP bar with a diminishing approach curve, same shape as horse
   // stats' ceiling-targeting formula — was a flat +1/day with a hard stop at
   // 100 before, which just abruptly froze rather than visibly slowing down.
-  if (trainedActively) skill = clamp(Math.round((skill + 1 * (1 - skill / 100)) * 10) / 10, 0, 100);
+  // Cut to a fraction of its old rate (was 1/day, 4/day walking) per
+  // playtesting feedback that Skill reached "Elite" after 40 days with zero
+  // race wins — training still counts, but racing (see the result-scaled
+  // gain in resolveRaceDay above) is now the dominant driver, not the clock.
+  if (trainedActively) skill = clamp(Math.round((skill + 0.35 * (1 - skill / 100)) * 10) / 10, 0, 100);
 
   if (walking) {
     mastery[walkPlan!] = clamp(mastery[walkPlan!] + 8, 0, 100);
-    skill = clamp(Math.round((skill + 4 * (1 - skill / 100)) * 10) / 10, 0, 100);
+    skill = clamp(Math.round((skill + 1.3 * (1 - skill / 100)) * 10) / 10, 0, 100);
     reportLines.push(`Spent the day at ${walkPlan}, walking every yard from stalls to winning post — course knowledge now ${Math.round(mastery[walkPlan!])}/100. The string had an easy day back home.`);
   }
   if (skill > skillBefore) reportLines.push(`Skill: +${(Math.round((skill - skillBefore) * 10) / 10).toFixed(1)} (now ${Math.round(skill)}/100).`);
@@ -531,15 +578,23 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
     newsLine = pick(NEWS_LINES(yard, Object.keys(COURSES)));
   } else if (roll < 0.8) {
     // ~30% of decision-days are a quiz instead of an ordinary training
-    // moment — keeps total decision frequency unchanged.
-    const tm = Math.random() < 0.3 ? quizMoment({ ...s, horses }) : trainingMoment({ ...s, horses });
-    if (tm) queue = [tm]; else newsLine = pick(QUIET_DAYS);
+    // moment — keeps total decision frequency unchanged. Appended, not
+    // assigned outright — a `queue = [tm]` here used to silently wipe out
+    // anything already queued this same tick (a race's "Riding instructions"
+    // decision, a going-change decision, a vet-bill decision), since those
+    // are built earlier in this function. Races self-healed (a still-entered,
+    // still-overdue race just re-queues its tactics decision next tick), but
+    // a one-shot vet-bill decision did not — caught while wiring the new
+    // money-sink vet bill (see vetBills.ts), same bug class as #3 in
+    // "Bug classes worth remembering" below.
+    const tm = Math.random() < 0.3 ? quizMoment({ ...s, horses }) : trainingMoment({ ...s, horses }, s.eventHistory.training ?? []);
+    if (tm) { queue = [...queue, tm]; if (tm.id) eventHistory.training = recordSeen(s.eventHistory.training ?? [], tm.id, TRAINING_POOL_SIZE); } else newsLine = pick(QUIET_DAYS);
   } else newsLine = null;
 
   // --- new race slate every few days ---
   const myBest = horses.filter(h => h.injuryDays === 0).sort((a, b) => OR(b) - OR(a))[0];
   if (myBest && (slate.length === 0 || Math.random() < 0.35)) {
-    slate = makeSlate(s.day + 1, unlockedCourses(reputation), effRating(myBest));
+    slate = makeSlate(s.day + 1, unlockedCourses(reputation), effRating(myBest), myBest.runs);
     if (slate.length) reportLines.push(`New entries up: ${slate.map(r => r.name).join(", ")}.`);
   }
 
@@ -592,7 +647,7 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
     ...s, day, year, horses, trust, cash, reputation, celebrity, skill, mastery, slate, entered, story, results, milestones,
     messages: [...msgs, ...s.messages].slice(0, 60), news: newsLine, queue,
     flash: flashLines.length ? flashLines : null,
-    pressRoomUsed: {}, pressRoomFollowupDay,
+    pressRoomUsed: {}, pressRoomFollowupDay, eventHistory,
   };
 }
 
@@ -623,10 +678,24 @@ export function enterRace(s: GameState, raceOpt: RaceCard, horseId: number): Gam
   // "who you're probably up against," not a guarantee. See CLAUDE.md.
   const { entries } = drawField(s.roster, raceOpt, new Set(), s.usedNames);
   const fieldPreview = entries.map(e => ({ name: e.horse.name, trainerName: e.trainerName ?? "unattached", mark: e.horse.mark ?? Math.round(OR(e.horse)) }));
+  const fee = entryFee(raceOpt.grade);
   return {
     ...s,
+    cash: s.cash - fee,
     entered: [...s.entered, { ...raceOpt, horseId, fieldPreview }],
     slate: s.slate.filter(r => r.id !== raceOpt.id),
-    messages: [{ day: s.day, text: `Declared: ${s.horses.find(h => h.id === horseId)!.name} in the ${raceOpt.name}, ${raceOpt.dist}f, day ${raceOpt.raceDay}.` }, ...s.messages].slice(0, 60),
+    messages: [{ day: s.day, text: `Declared: ${s.horses.find(h => h.id === horseId)!.name} in the ${raceOpt.name}, ${raceOpt.dist}f, day ${raceOpt.raceDay}. Entry fee ${money(fee)}.` }, ...s.messages].slice(0, 60),
   };
+}
+
+// A per-horse "hire cost" each time a piece of kit is newly fitted, not a
+// one-off purchase — no cost to remove it, and re-fitting it later costs
+// again (real yards don't keep every horse's gear locked to it forever
+// either). Part of "money has no purpose" (see CLAUDE.md "Money sinks").
+export function toggleGear(s: GameState, horseId: number, gearId: GearId): GameState {
+  const h = s.horses.find(x => x.id === horseId);
+  if (!h) return s;
+  const wasOn = h.gear.includes(gearId);
+  const next = withHorse(s, horseId, x => ({ ...x, gear: wasOn ? x.gear.filter(g => g !== gearId) : [...x.gear, gearId] }));
+  return wasOn ? next : { ...next, cash: next.cash - GEAR[gearId].cost };
 }

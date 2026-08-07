@@ -5,15 +5,21 @@
 // around race day. Light, tabloid-ish tone — distinct from the more
 // serious scripted narrative beats, which is fine since this is ambient
 // colour, not the main story.
-import { YARD, clamp, pick } from "@/lib/sim";
+import { YARD, clamp } from "@/lib/sim";
 import { note } from "./stateUtils";
+import { pickFresh } from "./variety";
 import type { DecisionEvent, GameState } from "./types";
 
 const YARD_JOCKEY_NOTE = `a swipe at ${YARD.jockey.name}'s tactics gets back to him before you're even out of the car park`;
 
-export function makePreRacePress(horseName: string, raceName: string): DecisionEvent {
-  const variant = pick([
+export const PRE_RACE_POOL_SIZE = 3;
+export const POST_RACE_WIN_POOL_SIZE = 2;
+export const POST_RACE_LOSS_POOL_SIZE = 2;
+
+export function makePreRacePress(horseName: string, raceName: string, recent: string[] = []): DecisionEvent {
+  const variant = pickFresh([
     {
+      id: "paddock-pack",
       title: "The paddock press pack",
       text: `A reporter catches you by the rail before the ${raceName}, notebook already out. "Go on then — bold prediction for ${horseName}?"`,
       choices: [
@@ -22,6 +28,7 @@ export function makePreRacePress(horseName: string, raceName: string): DecisionE
       ],
     },
     {
+      id: "rival-word",
       title: "A word about the opposition",
       text: `"Word is one of the rival trainers fancies their chances today more than yours," the reporter says, watching for a reaction before the ${raceName}. It might even be true. It might just be a reporter trying to get a rise out of you.`,
       choices: [
@@ -30,6 +37,7 @@ export function makePreRacePress(horseName: string, raceName: string): DecisionE
       ],
     },
     {
+      id: "superstition-question",
       title: "A question you weren't expecting",
       text: `Between the serious questions about ${horseName}'s prospects in the ${raceName}, the reporter asks, entirely deadpan, whether you have any pre-race superstitions. You did not prepare an answer for this.`,
       choices: [
@@ -37,14 +45,15 @@ export function makePreRacePress(horseName: string, raceName: string): DecisionE
         { label: "\"No, just the work.\"", apply: (st: GameState) => note({ ...st, reputation: clamp(st.reputation + 1, 0, 100) }, `A refreshingly boring answer. The reporter looks faintly disappointed and moves on to the next trainer. (Reputation +1.)`) },
       ],
     },
-  ]);
+  ], recent);
   return { ...variant, tag: "PRESS" as const };
 }
 
-export function makePostRacePress(horseName: string, raceName: string, won: boolean): DecisionEvent {
+export function makePostRacePress(horseName: string, raceName: string, won: boolean, recent: string[] = []): DecisionEvent {
   const variant = won
-    ? pick([
+    ? pickFresh([
       {
+        id: "winners-enclosure",
         title: "In the winner's enclosure",
         text: `Cameras are already on you before you've got the saddle off. "Talk us through that one" — as if the last ten minutes weren't still a blur.`,
         choices: [
@@ -53,6 +62,7 @@ export function makePostRacePress(horseName: string, raceName: string, won: bool
         ],
       },
       {
+        id: "straight-after-line",
         title: "Straight after the line",
         text: `A reporter wants "one word" to sum up the win with ${horseName} in the ${raceName}. Nobody ever actually gives one word.`,
         choices: [
@@ -60,9 +70,10 @@ export function makePostRacePress(horseName: string, raceName: string, won: bool
           { label: "\"Job done.\"", apply: (st: GameState) => note({ ...st, reputation: clamp(st.reputation + 2, 0, 100) }, `Two words, not one, but nobody's counting. Insiders like a trainer who doesn't need the moment to be about them. (Reputation +2.)`) },
         ],
       },
-    ])
-    : pick([
+    ], recent)
+    : pickFresh([
       {
+        id: "fishing-for-reaction",
         title: "Fishing for a reaction",
         text: `A reporter catches you on the way back to the yard after ${horseName}'s below-par run in the ${raceName}, clearly hoping for something juicier than "the horse ran badly."`,
         choices: [
@@ -71,6 +82,7 @@ export function makePostRacePress(horseName: string, raceName: string, won: bool
         ],
       },
       {
+        id: "kind-question",
         title: "The kind question",
         text: `Not every reporter is circling for blood — this one just asks what went wrong with ${horseName} today, straight and simple.`,
         choices: [
@@ -78,6 +90,6 @@ export function makePostRacePress(horseName: string, raceName: string, won: bool
           { label: "Deflect — no excuses", apply: (st: GameState) => note(st, `"No excuses, we'll regroup." Safe, forgettable, and by tomorrow nobody remembers it was even asked.`) },
         ],
       },
-    ]);
+    ], recent);
   return { ...variant, tag: "PRESS" as const };
 }

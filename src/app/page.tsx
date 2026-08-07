@@ -4,7 +4,10 @@ import { YARD } from "@/lib/sim";
 import type { CourseName, GearId, RaceCard } from "@/lib/sim";
 import {
   advanceDay, chooseDecision as engineChooseDecision, enterRace as engineEnterRace, newGame, resolveHorsePick,
+  toggleGear as engineToggleGear,
 } from "@/lib/game/engine";
+import { buyUpgrade } from "@/lib/game/upgrades";
+import type { YardUpgradeId } from "@/lib/game/upgrades";
 import { loadGame, saveGame } from "@/lib/game/storage";
 import type { GameState, TrainingPlan } from "@/lib/game/types";
 import { IntroScreen } from "@/components/intro/IntroScreen";
@@ -102,13 +105,9 @@ export default function Home() {
 
   const enterRace = (race: RaceCard, horseId: number) => setG(s => (s ? engineEnterRace(s, race, horseId) : s));
 
-  const toggleGear = (horseId: number, gearId: GearId) =>
-    setG(s => s && ({
-      ...s,
-      horses: s.horses.map(h => h.id === horseId
-        ? { ...h, gear: h.gear.includes(gearId) ? h.gear.filter(x => x !== gearId) : [...h.gear, gearId] }
-        : h),
-    }));
+  const toggleGear = (horseId: number, gearId: GearId) => setG(s => (s ? engineToggleGear(s, horseId, gearId) : s));
+
+  const buyYardUpgrade = (id: YardUpgradeId) => setG(s => (s ? buyUpgrade(s, id) : s));
 
   const toggleStudy = (course: CourseName) => setG(s => s && ({ ...s, study: s.study === course ? null : course }));
 
@@ -190,7 +189,7 @@ export default function Home() {
 
       {tab === "press" && <PressRoomTab g={g} onAction={doPressRoomAction} />}
 
-      {tab === "yard" && <YardTab g={g} yard={yard} />}
+      {tab === "yard" && <YardTab g={g} yard={yard} onBuyUpgrade={buyYardUpgrade} />}
 
       <AdvanceBar
         disabled={advanceLocked}

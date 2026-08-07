@@ -40,6 +40,7 @@ export type GearId = "blinkers" | "cheekpieces" | "tonguetie" | "hood";
 
 export interface GearItem {
   label: string;
+  cost: number; // one-time, charged the first time it's equipped on a given horse
   help: string;
   apply: (exp: number, h: Horse) => number;
   noiseAdj: (h: Horse) => number;

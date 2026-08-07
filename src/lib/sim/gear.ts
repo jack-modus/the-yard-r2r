@@ -7,16 +7,16 @@ import type { GearId, GearItem, Horse } from "./types";
 // 0.05-0.22) — otherwise gear's effect on consistency would round to
 // nothing against the new, realistically-larger race-day noise.
 export const GEAR: Record<GearId, GearItem> = {
-  blinkers: { label: "Blinkers",
+  blinkers: { label: "Blinkers", cost: 90,
     help: "Restricts a horse's vision to encourage focus. Sharpens a keen or unfocused horse's finishing effort — but can backfire on one that was already racing sensibly.",
     apply: (exp) => exp * 1.05, noiseAdj: h => (h.temperament >= 60 ? 0.08 : -0.05) },
-  cheekpieces: { label: "Cheekpieces",
+  cheekpieces: { label: "Cheekpieces", cost: 55,
     help: "A gentler version of blinkers — a subtler focus aid with less risk of overdoing it.",
     apply: (exp) => exp * 1.02, noiseAdj: () => -0.026 },
-  tonguetie: { label: "Tongue Tie",
+  tonguetie: { label: "Tongue Tie", cost: 40,
     help: "Stops the tongue interfering with breathing at speed. Low risk, modest and reliable benefit for a horse that empties the tank late.",
     apply: (exp) => exp * 1.015, noiseAdj: () => 0 },
-  hood: { label: "Hood",
+  hood: { label: "Hood", cost: 45,
     help: "Cuts down noise and peripheral distraction for a nervy traveller. Calms rather than sharpens — makes a horse more consistent, not faster.",
     apply: (exp) => exp, noiseAdj: () => -0.105 },
 };

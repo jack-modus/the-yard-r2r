@@ -13,11 +13,11 @@ import type { ClassicOutcome, DecisionEvent, GameState } from "./types";
 export const BEAT3_YARD: DecisionEvent = {
   title: "Out in the yard",
   tag: "YARD",
-  text: `A jockey leans on the rail near the last box, watching you find your feet — Rossa Bellini, the stable's number one, sizing up the new assistant the way jockeys size up everything: quickly, and without much interest in being wrong. You tell him the plan anyway — not just to win, but to be the best. A Group 1. Eventually, the Classics. All of them.\n\nHe laughs, not unkindly. "Okay mate. Best win a race first. Ask me again after." He nods once, like that settles it, and goes back to his own horse.`,
+  text: `There's a jockey leaning on the rail by the last box — small and very still, the way men are when they spend their working lives at forty miles an hour. Charlie Redfern, the stable's number one. He watches you come down the row without moving anything but his eyes.\n\n"New assistant," he says. Not a question. Somewhere between a greeting and a diagnosis.\n\nAnd maybe it's the morning, or the horses, or the headcollar still in your hand — but you tell him. All of it. Not just winning: being the best. A Group 1. Then the Classics — all five of them, and at the pace you're talking, possibly some races that haven't been invented yet.\n\nCharlie hears the whole speech with the patience of a man being read a menu in a language he doesn't speak. Then he laughs — once, not unkindly.\n\n"Okay, mate. Win a race." He pushes off the rail, already done with the conversation. "Ask me again after."`,
   choices: [
     {
       label: "Continue →",
-      apply: st => note({ ...st, awaitingHorsePick: true }, `Big talk, quietly made. Now it's just a matter of proving it.`),
+      apply: st => note({ ...st, awaitingHorsePick: true }, `You told the stable's number one jockey you'd win everything. He suggested you start by winning anything. Fair.`),
     },
   ],
 };
@@ -31,11 +31,11 @@ export const BEAT3_YARD: DecisionEvent = {
 export const BEAT2B_HEAD_LAD: DecisionEvent = {
   title: "Ray Fenwick, head lad",
   tag: "YARD",
-  text: `Ray Fenwick meets you at the yard gates before Bridges has finished his coffee — head lad here longer than some of the horses have been alive. He doesn't offer a hand. "So you're the one." A pause, sizing you up properly. "I mucked out for your grandfather one summer, years back. Best horseman I ever worked for. Patient — more than I can say for most of you young ones. Your father—" he stops himself there. "Well. Let's see what you're made of instead of talking about it."\n\nHe walks you down the row of boxes — six horses, six sets of ears pricking up at a stranger's footsteps. "Feed's at six, work starts at half six, and I don't care whose grandson you are if a horse goes hungry on your watch." He hands you a headcollar without asking if you want it. "Right. Let's get you started."`,
+  text: `Ray Fenwick is waiting at the gates with the expression of a man who has met a lot of new assistant trainers and outlasted every single one of them. Head lad here since before some of these horses' mothers were born. He doesn't offer a hand.\n\n"So you're the one." He looks you over the way he'd look over a yearling at the sales — feet first, face last, no comment on either. "I did a summer for your grandfather once, mucking out. Finest horseman I ever worked under. He could tell you what a horse was thinking three days before the horse thought it." A pause. "Your father I met twice. Once at the races, and once—" He decides against the second one. "Anyway."\n\nHe walks you down the row of boxes. Six horses; six sets of ears swivelling after you like radar dishes.\n\n"Feed's at six, work's at half six, and if a horse goes hungry on your watch I don't care whose grandson you are — you'll be finding your own way home." He hands you a headcollar without asking whether you want it. There is, you sense, no version of this morning where you weren't going to end up holding it. "Right. Let's get you started."`,
   choices: [
     {
       label: "Continue →",
-      apply: st => note({ ...st, queue: [...st.queue, BEAT3_YARD] }, `Ray showed you round without much ceremony. It felt like the right kind of welcome.`),
+      apply: st => note({ ...st, queue: [...st.queue, BEAT3_YARD] }, `Ray's welcome: short on ceremony, precise on feeding times. From him, that's probably a good sign.`),
     },
   ],
 };
@@ -47,11 +47,11 @@ export const BEAT2B_HEAD_LAD: DecisionEvent = {
 export const BEAT2_BRIDGES_OFFICE: DecisionEvent = {
   title: "In Bridges' office",
   tag: "BOSS",
-  text: `Bridges doesn't stand. "A fresh start — for you. I'm taking a bit of a risk here, and I want to be straight about why." He lets that sit. "Your father owed a lot of people money by the end. Rubbed a lot of people up the wrong way, too. He was a good trainer, Tony — a genuinely good one — but he gambled every bit of it away. Can you assure me you won't do the same?"\n\nHe nods at a black-and-white photograph on the wall — two men at the races, sharp suits, a winner's enclosure. "That's my father. And that" — he taps the other man — "is your grandfather. He was a great man, your grandfather. One of the best I ever saw. Your father could have been him. He chose not to be."\n\nHe doesn't wait for an answer out loud, and you don't try to give him one — some promises aren't worth saying, only keeping. "Right," he says, as if you'd answered anyway. "Go and find Ray — he'll show you round. I've got one horse spare for you to make something of. Just the one, mind — earn the rest."`,
+  text: `The office smells of leather and strong tea, and Bridges doesn't stand up — a man who has decided in advance exactly how much welcome this is going to be.\n\n"I'll be straight with you, Tony, because nobody else will. Your father died owing half of Newmarket, and the other half had stopped lending. He was a fine trainer — better than most people can afford to remember — and he put every penny a winner ever made him on some slower horse in the next race."\n\nHe turns a photograph on the desk to face you: two men in a winner's enclosure, black and white, suits sharp enough to shave with. "My father. And your grandfather, who trained the horse. Best I ever saw — and I've seen everybody." A pause. "Your father could have been in this photograph. He preferred the betting ring."\n\nYou start to say something — a promise, probably, the kind that sounds very good in offices — and he waves it away like a fly.\n\n"Don't. I've had promises from Vincenzos before. Go and find Ray, he'll show you round. There's one horse spare — one — and what you do with it will tell me more than whatever you were about to say."`,
   choices: [
     {
       label: "Continue →",
-      apply: st => note({ ...st, queue: [...st.queue, BEAT2B_HEAD_LAD] }, `Bridges laid out the deal — a fresh start, on trust that hasn't been earned yet. You mean to earn it.`),
+      apply: st => note({ ...st, queue: [...st.queue, BEAT2B_HEAD_LAD] }, `Bridges cut you off before you could promise him anything. Probably wise, and oddly a relief: nothing said, everything to earn.`),
     },
   ],
 };

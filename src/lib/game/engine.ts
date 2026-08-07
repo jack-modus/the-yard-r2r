@@ -5,7 +5,7 @@
 import {
   CMT_ALSO, CMT_PLACE, CMT_WIN,
   COURSES, GEAR, GOINGS, OR, PRIZE, YARD,
-  clamp, drawField, effRating, makeBeats, makeCandidateHorses, makeHorse, makeRoster, makeSlate,
+  clamp, computeRaceTrack, drawField, effRating, makeBeats, makeCandidateHorses, makeHorse, makeRoster, makeSlate,
   pick, ri, runRace,
 } from "@/lib/sim";
 import type { CourseName, Grade, RaceCard } from "@/lib/sim";
@@ -279,7 +279,7 @@ export function resolveRaceDay(st: GameState, tactic: Tactic, raceId: number): G
     ...st, horses, roster, trust, cash, reputation, celebrity, skill, mastery, milestones, results,
     entered: st.entered.filter(r => r.id !== raceId), story, ending,
     queue: [...st.queue, ...queueExtra],
-    liveRace: { raceName: race.name, beats: makeBeats(race, res, mine, tactic), idx: 0 },
+    liveRace: { raceName: race.name, beats: makeBeats(race, res, mine, tactic), idx: 0, track: computeRaceTrack(res, mine, tactic) },
     messages: [...msgs, ...st.messages].slice(0, 60),
   };
 }

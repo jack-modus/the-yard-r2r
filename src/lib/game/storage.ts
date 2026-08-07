@@ -8,7 +8,7 @@
 // line of defence in case a bump gets forgotten.
 import type { GameState } from "./types";
 
-const KEY = "the-yard:rags-to-riches:v3"; // v3: GameState.entered went from a single slot to EnteredRace[]
+const KEY = "the-yard:rags-to-riches:v4"; // v4: LiveRace gained a required `track` field (the visual race track)
 
 type SerializedState = Omit<GameState, "usedNames"> & { usedNames: string[] };
 

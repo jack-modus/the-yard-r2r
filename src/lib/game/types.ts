@@ -1,6 +1,6 @@
 // Game state shape, extracted from the useState/reducer logic in
 // reference/rags-to-riches-v6.jsx and given real types.
-import type { CourseName, Horse, RaceCard, ScoredEntry } from "@/lib/sim";
+import type { CourseName, Horse, RaceCard, RaceTrack, ScoredEntry } from "@/lib/sim";
 
 export type { FormLine } from "@/lib/sim";
 
@@ -73,6 +73,7 @@ export interface LiveRace {
   raceName: string;
   beats: string[];
   idx: number;
+  track: RaceTrack;
 }
 
 export interface RaceResultEntry {

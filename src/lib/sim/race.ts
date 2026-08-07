@@ -100,7 +100,12 @@ export function makeSlate(day: number, homeTracks: CourseName[], horseOR: number
   };
   options.push(mk(pick(homeTracks)));
   options.push(mk(pick(homeTracks)));
-  if (Math.random() < 0.6) options.push(mk(pick(away)));
+  // `away` is empty once every course is unlocked (tier-2 reputation
+  // threshold cleared) — guard rather than pick() crashing on an empty
+  // array. Caught via a long scripted playthrough, not a short one; earlier
+  // test runs likely never kept reputation above the tier-2 bar for long
+  // enough to hit this.
+  if (away.length && Math.random() < 0.6) options.push(mk(pick(away)));
   return options;
 }
 

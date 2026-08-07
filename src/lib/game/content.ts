@@ -112,6 +112,63 @@ export function trainingMoment(s: GameState): DecisionEvent | null {
         { label: "Point them at the head lad instead", apply: st => note(st, `Ray handles it far better than you would have. The crew leaves happy, and nobody outside the yard ever knows you dodged it.`) },
       ],
     },
+    {
+      title: "The yard cat has opinions",
+      tag: "YARD",
+      text: `The yard cat — nobody remembers hiring it, it simply arrived one winter and stayed — has taken to sitting in ${h.name}'s doorway every morning and refusing to move. The lads have started calling it a good omen. You're not sure a cat can have opinions about a racehorse, but you've been wrong before.`,
+      choices: [
+        { label: "Lean into it — let the cat stay", apply: st => note(withHorse(st, h.id, x => ({ ...x, morale: clamp(x.morale + 3, 0, 100) })), `${h.name} seems genuinely calmer with the cat around. Ridiculous. Also, apparently, working.`) },
+        { label: "Shoo the cat off, this is a yard not a petting zoo", apply: st => note(st, `The cat gives you a look of profound disappointment and relocates to someone else's box out of spite.`) },
+      ],
+    },
+    {
+      title: "A system that cannot fail", tag: "YARD",
+      text: `A man at the sales ground corners you with a betting "system" involving the phases of the moon, ${h.name}'s coat colour, and — he's very insistent about this part — the number of vowels in the racecourse's name. He has charts. He has a whole ring binder of charts.`,
+      choices: [
+        { label: "Humour him for ten minutes", apply: st => note(st, `You nod along politely. None of it makes any sense, but he seems so happy explaining it that you almost feel bad leaving.`) },
+        { label: "Make your excuses immediately", apply: st => note(st, `You've heard enough moon-phase theories for one career. He looks wounded but recovers by the time you're out of earshot.`) },
+      ],
+    },
+    {
+      title: "A sponsorship enquiry, sort of", tag: "PRESS",
+      text: `A local sausage company wants to sponsor ${h.name}'s next race — a modest cash sum in exchange for "Bridges' Bangers" getting a mention in the racecard. It is, by some distance, the least dignified offer the yard has ever received.`,
+      choices: [
+        { label: "Take the money — dignity is overrated", apply: st => note({ ...st, cash: st.cash + 150, celebrity: clamp(st.celebrity + 2, 0, 100) }, `${h.name} is now, technically, sponsored by sausages. £150 richer and marginally more famous for it. (Celebrity +2.)`) },
+        { label: "Politely decline", apply: st => note(st, `You decide the yard's reputation can survive without a sausage-based partnership. Somehow you don't regret it.`) },
+      ],
+    },
+    {
+      title: "The apprentice wants advice", tag: "TRAINING",
+      text: `A stable apprentice, all of seventeen and painfully earnest, asks if you have "any tips for making it" in this game. You remember being asked the same thing roughly never, because you were the one asking it a few years back.`,
+      choices: [
+        { label: "Give him something honest", apply: st => note({ ...st, trust: clamp(st.trust + 2, 0, 100) }, `Word gets back to ${yard.boss} that you took the time. It's noticed. (Trust +2.)`) },
+        { label: "Tell him to watch and learn like everyone else did", apply: st => note(st, `Harsh, maybe, but not wrong. He nods and gets back to mucking out, slightly crestfallen.`) },
+      ],
+    },
+    {
+      title: "A radio phone-in wants a word", tag: "PRESS",
+      text: `A local radio host wants you live on air for "sixty seconds on the state of the yard." His first question is whether ${h.name} is "the next big thing." His second question, before you can answer the first, is also whether ${h.name} is "the next big thing."`,
+      choices: [
+        { label: "\"Watch this space.\"", apply: st => note({ ...st, celebrity: clamp(st.celebrity + 4, 0, 100) }, `A soundbite with absolutely nothing in it, which is exactly what radio wants. (Celebrity +4.)`) },
+        { label: "Give an actually honest answer", apply: st => note({ ...st, reputation: clamp(st.reputation + 2, 0, 100) }, `The host seems faintly disappointed by the nuance, but the racing press notices a trainer who doesn't just say what's expected. (Reputation +2.)`) },
+      ],
+    },
+    {
+      title: "A lucky headcollar", tag: "YARD",
+      text: `One of the lads swears ${h.name} only works well in a specific, extremely battered headcollar that is, by any objective measure, falling apart. He's threatening to quit if you make him use the new one.`,
+      choices: [
+        { label: "Let superstition win — keep the old one", apply: st => note(withHorse(st, h.id, x => ({ ...x, morale: clamp(x.morale + 2, 0, 100) })), `The lad is vindicated. ${h.name}, entirely unaware of any of this, works well regardless.`) },
+        { label: "Retire the headcollar, it's a health hazard", apply: st => note(st, `The lad sulks for exactly one day, then forgets all about it. The new headcollar does its job.`) },
+      ],
+    },
+    {
+      title: "An owner's very specific request", tag: "YARD",
+      text: `A prospective owner rings the yard, keen to get involved — on the condition that any future horse be named after his late budgerigar, Sir Reginald Featherstonehaugh III. ${yard.boss} takes the call in stony silence and hands you the phone without a word of warning.`,
+      choices: [
+        { label: "Take it in your stride", apply: st => note({ ...st, celebrity: clamp(st.celebrity + 1, 0, 100) }, `You manage to keep a straight face for the whole call. Word of it gets round the yard by teatime regardless. (Celebrity +1.)`) },
+        { label: "Politely redirect him to the head lad", apply: st => note(st, `Ray takes the call instead and, remarkably, handles it with total sincerity. Some people are built for this job.`) },
+      ],
+    },
   ];
   if (s.story.classicResults.length > 0) {
     templates.push(makeClassicCallback(s.story.classicResults[s.story.classicResults.length - 1]));

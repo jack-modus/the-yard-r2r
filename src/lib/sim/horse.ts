@@ -6,17 +6,22 @@ import { NAMES, takeName } from "./names";
 import type { Horse } from "./types";
 
 export function makeHorse(q: number, used: Set<string>, opts: { age?: number; fitness?: number } = {}): Horse {
+  const speed = clamp(Math.round(q + rnd(-6, 6)), 25, 99);
+  const stamina = clamp(Math.round(q + rnd(-6, 6)), 25, 99);
+  const accel = clamp(Math.round(q + rnd(-6, 6)), 25, 99);
+  const brk = clamp(Math.round(q + rnd(-10, 8)), 20, 99);
+  const balance = clamp(Math.round(q + rnd(-10, 8)), 20, 99);
+  // Genetic ceiling per stat — randomized headroom above the starting value,
+  // not derivable from it alone. See the Horse.statCeilings doc comment.
+  const ceiling = (current: number) => clamp(current + ri(10, 30), current, 99);
   return {
     // Sire/dam don't dedupe against `used` — real sires cover many foals,
     // and only the horse's own name needs to be unique/visible in the UI.
     id: nid(), name: takeName(used),
     sire: pick(NAMES), dam: pick(NAMES),
     colour: pick(["b", "b", "ch", "ch", "gr", "br"]), sex: pick(["c", "f", "g", "f", "c"]), age: opts.age ?? ri(2, 4),
-    speed: clamp(Math.round(q + rnd(-6, 6)), 25, 99),
-    stamina: clamp(Math.round(q + rnd(-6, 6)), 25, 99),
-    accel: clamp(Math.round(q + rnd(-6, 6)), 25, 99),
-    brk: clamp(Math.round(q + rnd(-10, 8)), 20, 99),
-    balance: clamp(Math.round(q + rnd(-10, 8)), 20, 99),
+    speed, stamina, accel, brk, balance,
+    statCeilings: { speed: ceiling(speed), stamina: ceiling(stamina), accel: ceiling(accel), brk: ceiling(brk), balance: ceiling(balance) },
     temperament: clamp(Math.round(q + rnd(-12, 10)), 20, 99),
     prefGoing: ri(1, 4), prefDist: pick([5, 6, 7, 8, 10, 12, 14]),
     goingKnown: false, distKnown: false,
@@ -39,6 +44,11 @@ export function makeCandidateHorses(used: Set<string>, n = 6): Horse[] {
       const gift = pick(["balance", "brk", "temperament", "accel"] as const);
       h[gift] = clamp(h[gift] + ri(18, 26), 20, 92);
       h.quirk = { stat: gift, revealed: false };
+      // The quirk bump can push a stat past its already-rolled ceiling —
+      // patch the ceiling up so the horse isn't already maxed out on day one.
+      if (gift !== "temperament") {
+        h.statCeilings[gift] = clamp(Math.max(h.statCeilings[gift], h[gift] + ri(3, 10)), h[gift], 99);
+      }
     }
     return h;
   });

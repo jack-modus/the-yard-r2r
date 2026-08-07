@@ -1,6 +1,6 @@
-export type TabId = "stable" | "racing" | "notebook" | "yard";
+export type TabId = "stable" | "racing" | "notebook" | "press" | "yard";
 
-const TABS: TabId[] = ["stable", "racing", "notebook", "yard"];
+const TABS: TabId[] = ["stable", "racing", "notebook", "press", "yard"];
 
 export function TabBar({ tab, onChange }: { tab: TabId; onChange: (t: TabId) => void }) {
   return (

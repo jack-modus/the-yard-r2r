@@ -8,7 +8,7 @@
 // line of defence in case a bump gets forgotten.
 import type { GameState } from "./types";
 
-const KEY = "the-yard:rags-to-riches:v4"; // v4: LiveRace gained a required `track` field (the visual race track)
+const KEY = "the-yard:rags-to-riches:v5"; // v5: quizCount/quizMissed, pressRoomUsed/pressRoomFollowupDay, Horse.statCeilings all added
 
 type SerializedState = Omit<GameState, "usedNames"> & { usedNames: string[] };
 
@@ -19,6 +19,8 @@ function looksLikeCurrentShape(parsed: unknown): parsed is SerializedState {
     typeof p.day === "number" &&
     Array.isArray(p.horses) &&
     Array.isArray(p.entered) &&
+    Array.isArray(p.quizMissed) &&
+    typeof p.pressRoomUsed === "object" && p.pressRoomUsed !== null &&
     typeof p.story === "object" && p.story !== null &&
     typeof (p.story as Record<string, unknown>).stage === "string"
   );

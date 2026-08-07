@@ -10,6 +10,7 @@ const TAG_COLOR: Record<DecisionTag, string> = {
   TRAINING: "#0b3d91",
   FAMILY: "#0e7c86",
   YARD: "#1b7a43",
+  QUIZ: "#1f8a8c",
 };
 
 export function DecisionOverlay({ decision, onChoose }: { decision: DecisionEvent; onChoose: (i: number) => void }) {

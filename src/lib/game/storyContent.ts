@@ -341,3 +341,20 @@ export function diamondCupOutcomeMessage(outcome: Exclude<ClassicOutcome, "scrat
     case "tank": return `${horseName} never gets into the Diamond Cup at all. The biggest day of the year, and it never arrives for you.`;
   }
 }
+
+// ---------- Growing the string: an unmissable moment, not a buried log line ----------
+// Earning a second/third horse used to be just one more line in resolveRaceDay's
+// message stack — easy to miss entirely if a race also generated other
+// messages. Same "Continue →" single-choice pattern as the rewritten intro
+// beats: a dedicated full-screen moment the player can't scroll past.
+export function makeNewHorseAnnouncement(horseName: string, ordinal: "second" | "third"): DecisionEvent {
+  const text = ordinal === "second"
+    ? `${YARD.boss} finds you in the yard before you've even got the tack off. Not smiling exactly — that's not really his way — but close to it. "That's a place finish. You've earned a second string." He doesn't wait for a reaction. "${horseName}. Unraced two-year-old, decent family, plenty of homework still to do." A pause, the closest thing to warmth he allows himself. "Don't ruin it."`
+    : `Three winners now, and even ${YARD.boss} can't quite keep the satisfaction off his face. "That's not luck anymore. That's a yard being built." He leads you to a box you haven't used yet. "${horseName}. See what you can do with it." He doesn't say anything else — with him, that's the whole speech.`;
+  return {
+    title: ordinal === "second" ? "A second horse" : "A third horse",
+    tag: "BOSS",
+    text,
+    choices: [{ label: "Continue →", apply: (st: GameState) => st }],
+  };
+}

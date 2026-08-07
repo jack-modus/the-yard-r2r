@@ -7,7 +7,7 @@ import { PlanButton } from "@/components/ui/PlanButton";
 
 const WORK_TYPES: [TrainingPlan, string][] = [
   ["gallop", "GALLOP"], ["canter", "CANTER"], ["sprints", "SPRINTS"], ["stalls", "STALLS"],
-  ["school", "SCHOOL"], ["easy", "EASY"], ["rest", "REST"],
+  ["school", "SCHOOL"], ["sharp", "SHARP"], ["easy", "EASY"], ["rest", "REST"],
 ];
 
 const STAT_ROWS: [string, keyof Horse, string][] = [
@@ -63,7 +63,7 @@ export function StableTab({
               ))}
             </div>
             <div className="font-mono text-[11.5px] text-muted-dim mt-1">
-              gallop→speed · canter→stamina · sprints→accel · stalls→break · school→balance · easy/rest→recover
+              gallop→speed · canter→stamina · sprints→accel · stalls→break · school→balance · sharp→a little of everything, gently · easy/rest→recover
             </div>
             <div className="font-mono text-[11.5px] text-muted-dim mt-2 mb-0.5">GEAR (equip before you declare):</div>
             <div className="flex gap-1 flex-wrap">

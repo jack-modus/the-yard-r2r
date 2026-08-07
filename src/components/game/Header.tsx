@@ -16,7 +16,7 @@ export function Header({ g, yard, onHelp }: { g: GameState; yard: Yard; onHelp: 
         <span>TRUST {g.trust} ({metricRank(g.trust)})</span>
         <span>REP {g.reputation} ({metricRank(g.reputation)})</span>
         <span>CELEB {g.celebrity} ({metricRank(g.celebrity)})</span>
-        <span>SKILL {g.skill} ({metricRank(g.skill)})</span>
+        <span>SKILL {Math.round(g.skill)} ({metricRank(g.skill)})</span>
         <span
           onClick={onHelp}
           className="ml-auto cursor-pointer text-gold-500 border border-gold-500 rounded-full w-[18px] h-[18px] inline-flex items-center justify-center font-bold"

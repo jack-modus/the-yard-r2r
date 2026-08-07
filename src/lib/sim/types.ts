@@ -67,6 +67,13 @@ export interface Horse {
   balance: number;
   temperament: number; // higher = more consistent, less erratic
 
+  // Per-horse training ceiling for each physical stat — genetic potential,
+  // not shown as a raw number (same "hidden until discovered" spirit as
+  // prefGoing/prefDist below). Training gains taper toward this instead of
+  // a universal 99, so horses don't all converge to the same elite ceiling
+  // no matter how weak their starting quality was.
+  statCeilings: { speed: number; stamina: number; accel: number; brk: number; balance: number };
+
   // Hidden until discovered
   prefGoing: number; // 1-4, matches Course.going scale
   prefDist: number; // furlongs

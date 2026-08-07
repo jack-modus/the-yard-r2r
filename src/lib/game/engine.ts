@@ -8,11 +8,15 @@ import {
   clamp, computeRaceTrack, drawField, effRating, makeBeats, makeCandidateHorses, makeHorse, makeRoster, makeSlate,
   pick, ri, runRace,
 } from "@/lib/sim";
-import type { CourseName, Grade, RaceCard } from "@/lib/sim";
+import type { CourseName, Grade, Horse, RaceCard } from "@/lib/sim";
 import type { Tactic } from "@/lib/sim/commentary";
 import { NEWS_LINES, QUIET_DAYS, trainingMoment } from "./content";
+import { quizMoment } from "./quiz";
+import { applyPerceptionOverflow, checkThresholds } from "./metrics";
+import { makePostRacePress, makePreRacePress } from "./pressContent";
+import { makeRivalClapback } from "./pressRoom";
 import {
-  BEAT2_BRIDGES_OFFICE, BEAT5_REPORTER_PRE_RACE, BEAT6_MCLEAN_TAUNT, classicScratchedMessage,
+  BEAT2_BRIDGES_OFFICE, BEAT5_REPORTER_PRE_RACE, BEAT6_MCLEAN_TAUNT, classicScratchedMessage, makeNewHorseAnnouncement,
 } from "./storyContent";
 import {
   checkStoryTriggers, computeEnding, ensureNemesisInField, forcePosition, newStoryState, rescheduleDiamondCup,
@@ -49,6 +53,8 @@ export function newGame(used: Set<string>): GameState {
     ],
     news: null, milestones: { firstWin: false, secondHorse: false, thirdHorse: false, listedWin: false, groupWin: false, g1Win: false, tier2Unlocked: false },
     ending: null,
+    quizCount: 0, quizMissed: [],
+    pressRoomUsed: {}, pressRoomFollowupDay: null,
   };
 }
 
@@ -164,14 +170,19 @@ export function resolveRaceDay(st: GameState, tactic: Tactic, raceId: number): G
     const names: Record<string, string> = { balance: "beautifully balanced — turns and cambers barely touch it", brk: "electric from the gates", temperament: "utterly unflappable — it runs its race every time", accel: "capable of a genuinely smart turn of foot" };
     msgs.push({ day: st.day, text: `Now everyone can see what you saw in the bottom box: ${me.name} is ${names[me.quirk.stat]}.` });
   }
+  // Trust/Reputation/Celebrity are left unclamped through all three branches
+  // below — perception-metric overflow is resolved once, right after this
+  // block, via applyPerceptionOverflow (lib/game/metrics.ts). Skill keeps
+  // its own ordinary clamp; overflow is a perception-metric-only concept.
   if (race.isDiamondCup) {
     // The finale — biggest deltas in the game, no diminishing returns
-    // (it only ever happens once). Ending computed immediately after,
-    // using the just-updated trust/reputation/celebrity.
+    // (it only ever happens once). Ending is computed after the overflow
+    // step below, not here — it needs the final, post-overflow values, or
+    // a borderline verdict could be decided on since-corrected numbers.
     const outcome = resolveDiamondCupOutcome(story, me.name, mine.pos, res.length);
-    trust = clamp(trust + outcome.trust, 0, 100);
-    reputation = clamp(reputation + outcome.reputation, 0, 100);
-    celebrity = clamp(celebrity + outcome.celebrity, 0, 100);
+    trust = trust + outcome.trust;
+    reputation = reputation + outcome.reputation;
+    celebrity = celebrity + outcome.celebrity;
     skill = clamp(skill + outcome.skill, 0, 100);
     story = { ...outcome.story, stage: "ended" };
     msgs.push({ day: st.day, text: outcome.message });
@@ -181,17 +192,15 @@ export function resolveRaceDay(st: GameState, tactic: Tactic, raceId: number): G
     } else if (mine.pos > res.length - 2) {
       me.morale = clamp(me.morale - 4, 0, 100);
     }
-    ending = computeEnding(trust, reputation, celebrity);
-    msgs.push({ day: st.day, text: ending.text });
   } else if (race.isClassic) {
     // The Classics use their own diminishing-returns outcome system instead
     // of the ordinary grade-weighted trust/reputation logic below — applying
     // both would double-count.
     const cleanRaceName = race.name.replace(/\s*\([^)]*\)$/, "");
     const outcome = resolveClassicOutcome(story, st.day, cleanRaceName, me.name, mine.pos, res.length);
-    trust = clamp(trust + outcome.trust, 0, 100);
-    reputation = clamp(reputation + outcome.reputation, 0, 100);
-    celebrity = clamp(celebrity + outcome.celebrity, 0, 100);
+    trust = trust + outcome.trust;
+    reputation = reputation + outcome.reputation;
+    celebrity = celebrity + outcome.celebrity;
     skill = clamp(skill + outcome.skill, 0, 100);
     story = outcome.story;
     msgs.push({ day: st.day, text: outcome.message });
@@ -205,26 +214,38 @@ export function resolveRaceDay(st: GameState, tactic: Tactic, raceId: number): G
   } else {
     const gw = gradeWeight(race.grade);
     if (mine.pos === 1) {
-      me.wins++; me.morale = clamp(me.morale + 10, 0, 100); trust = clamp(trust + (typeof race.grade === "number" ? 5 : 10), 0, 100);
-      reputation = clamp(reputation + gw, 0, 100);
-      if (race.grade === "G1") { celebrity = clamp(celebrity + 10, 0, 100); msgs.push({ day: st.day, text: `The racing press is all over this one — a Group 1 winner from the bottom box makes a story too good to ignore.` }); }
-      else if (race.grade === "G2") celebrity = clamp(celebrity + 5, 0, 100);
+      me.wins++; me.morale = clamp(me.morale + 10, 0, 100); trust = trust + (typeof race.grade === "number" ? 5 : 10);
+      reputation = reputation + gw;
+      if (race.grade === "G1") { celebrity = celebrity + 10; msgs.push({ day: st.day, text: `The racing press is all over this one — a Group 1 winner from the bottom box makes a story too good to ignore.` }); }
+      else if (race.grade === "G2") celebrity = celebrity + 5;
       msgs.push({ day: st.day, text: `${me.name} WINS the ${race.name}! ${pick(yard.praise)}` });
       if (!milestones.firstWin) { milestones.firstWin = true; msgs.push({ day: st.day, text: `Your first winner as an assistant. The head lad shakes your hand. It starts here.` }); }
       if (race.grade === "L" && !milestones.listedWin) milestones.listedWin = true;
       if ((race.grade === "G3" || race.grade === "G2") && !milestones.groupWin) milestones.groupWin = true;
       if (race.grade === "G1" && !milestones.g1Win) milestones.g1Win = true;
     } else if (mine.pos <= 3) {
-      reputation = clamp(reputation + Math.max(1, Math.round(gw / 3)), 0, 100);
+      reputation = reputation + Math.max(1, Math.round(gw / 3));
       msgs.push({ day: st.day, text: `${me.name} finishes ${mine.pos} of ${res.length}. Plenty to build on.` });
     } else {
       if (mine.pos > res.length - 2) {
-        trust = clamp(trust - 2, 0, 100);
-        reputation = clamp(reputation - Math.max(1, Math.round(gw / 4)), 0, 100);
+        trust = trust - 2;
+        reputation = reputation - Math.max(1, Math.round(gw / 4));
         msgs.push({ day: st.day, text: `Well beaten. ${pick(yard.scold)}` });
       } else msgs.push({ day: st.day, text: `${me.name} finishes ${mine.pos} of ${res.length}. Back to the drawing board.` });
       me.morale = clamp(me.morale - (mine.pos > 5 ? 4 : 0), 0, 100);
     }
+  }
+
+  // --- perception-metric overflow, resolved once for whichever branch ran ---
+  const overflowed = applyPerceptionOverflow(
+    { trust: trustBefore, reputation: reputationBefore, celebrity: celebrityBefore },
+    { trust: trust - trustBefore, reputation: reputation - reputationBefore, celebrity: celebrity - celebrityBefore },
+  );
+  trust = overflowed.trust; reputation = overflowed.reputation; celebrity = overflowed.celebrity;
+
+  if (race.isDiamondCup) {
+    ending = computeEnding(trust, reputation, celebrity);
+    msgs.push({ day: st.day, text: ending.text });
   }
 
   // --- string grows on results, not trust: a place earns a second horse,
@@ -233,14 +254,16 @@ export function resolveRaceDay(st: GameState, tactic: Tactic, raceId: number): G
     milestones.secondHorse = true;
     const h2 = makeHorse(58, st.usedNames, { age: 2, fitness: 30 });
     horses.push(h2);
-    msgs.push({ day: st.day, text: `${yard.boss}: "That's a place finish — you've earned a second string. ${h2.name}, unraced two-year-old, decent family. Don't ruin it." A second box is yours.` });
+    msgs.push({ day: st.day, text: `A second box is yours: ${h2.name} joins the yard.` });
+    queueExtra = [...queueExtra, makeNewHorseAnnouncement(h2.name, "second")];
   }
   const totalWins = horses.reduce((sum, h) => sum + h.wins, 0);
   if (milestones.secondHorse && !milestones.thirdHorse && totalWins >= 3) {
     milestones.thirdHorse = true;
     const h3 = makeHorse(62, st.usedNames, { age: 2, fitness: 30 });
     horses.push(h3);
-    msgs.push({ day: st.day, text: `${yard.boss}: "Three winners now — that's a proper yard building. ${h3.name}, and see what you can do with it." A third box is yours.` });
+    msgs.push({ day: st.day, text: `A third box is yours: ${h3.name} joins the yard.` });
+    queueExtra = [...queueExtra, makeNewHorseAnnouncement(h3.name, "third")];
   }
 
   // --- the handicapper's letter: the official mark only moves when the form is reviewed ---
@@ -273,6 +296,18 @@ export function resolveRaceDay(st: GameState, tactic: Tactic, raceId: number): G
       day: st.day,
       text: `Trust ${fmt(dTrust)}, Reputation ${fmt(dRep)}, Celebrity ${fmt(dCel)}.`,
     });
+  }
+  // Threshold-crossing detection is NOT done here — resolveRaceDay is only
+  // ever invoked through a "Riding instructions" decision's apply(), so
+  // chooseDecision's own wrapper (which runs after any apply() returns)
+  // already catches every race-day threshold crossing too. Checking it a
+  // second time here would double both the message and the cash reward —
+  // caught via a long scripted playthrough showing a duplicated "Trust
+  // crosses 80... Trust crosses 80" message.
+  // Post-race press for ordinary races only — the Classics/Diamond Cup/
+  // nemesis arc already have their own dedicated reaction content.
+  if (!race.isClassic && !race.isDiamondCup && Math.random() < 0.35) {
+    queueExtra = [...queueExtra, makePostRacePress(me.name, race.name, mine.pos === 1)];
   }
   results = [{ race, res, mine, cmt }, ...results].slice(0, 30);
   return {
@@ -358,9 +393,15 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
         { label: `Hold up for one late run (plays to accel: ${Math.round(me.accel)}, traffic risk)`, apply: st => resolveRaceDay(st, "hold", e.id) },
       ],
     };
-    queue = (s.story.forceNemesisNextRace && s.story.stage === "nemesisPending")
-      ? [...queue, BEAT5_REPORTER_PRE_RACE, tacticsEvent]
-      : [...queue, tacticsEvent];
+    if (s.story.forceNemesisNextRace && s.story.stage === "nemesisPending") {
+      queue = [...queue, BEAT5_REPORTER_PRE_RACE, tacticsEvent];
+    } else if (!e.isClassic && !e.isDiamondCup && Math.random() < 0.4) {
+      // Pre-race press for ordinary races — the scripted nemesis race and
+      // the Classics/Diamond Cup already get their own dedicated press beats.
+      queue = [...queue, makePreRacePress(me.name, e.name), tacticsEvent];
+    } else {
+      queue = [...queue, tacticsEvent];
+    }
     return true; // stays in `entered` until resolveRaceDay actually resolves it
   });
 
@@ -372,10 +413,14 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
   // active-training gains up to +30% at 100, surfacing what was previously a
   // hidden, hardcoded training-effectiveness constant.
   const skillMult = 1 + (s.skill / 100) * 0.3;
-  const ACTIVE_TRAINING: TrainingPlan[] = ["gallop", "canter", "sprints", "stalls", "school"];
+  // "sharp" is deliberately gentler than the five focused types — a bit of
+  // everything instead of one stat hard, lower fatigue, no injury risk. The
+  // natural choice once a horse is nearing its ceiling (see statCeilings)
+  // or just for upkeep between hard sessions.
+  const ACTIVE_TRAINING: TrainingPlan[] = ["gallop", "canter", "sprints", "stalls", "school", "sharp"];
   const TRAINING_LABEL: Record<string, string> = {
     gallop: "gallop work", canter: "canter work", sprints: "sprint work", stalls: "stalls schooling",
-    school: "schooling", easy: "an easy day", rest: "a full rest day",
+    school: "schooling", sharp: "a sharpening spin", easy: "an easy day", rest: "a full rest day",
   };
   const PRIMARY_STAT: Partial<Record<string, { key: "speed" | "stamina" | "accel" | "brk" | "balance"; label: string }>> = {
     gallop: { key: "speed", label: "speed" }, canter: { key: "stamina", label: "stamina" },
@@ -404,36 +449,49 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
       sprints: { accel: 0.9, fitness: 1.5, fat: 6 },
       stalls: { brk: 1.0, fitness: 0.5, fat: 3 },
       school: { balance: 1.0, fitness: 0.5, fat: 3 },
+      sharp: { speed: 0.25, stamina: 0.25, accel: 0.25, brk: 0.25, balance: 0.25, fitness: 1.2, fat: 2 },
       easy: { fitness: 0.5, fat: -10 },
       rest: { fat: -18 },
     };
     const g = gains[p] || { fitness: 0.5, fat: -10 };
     const mult = ACTIVE_TRAINING.includes(p) ? skillMult : 1;
+    const nearCeiling = new Set<string>();
     Object.entries(g).forEach(([k, v]) => {
-      if (k === "fat") h.fatigue = clamp(h.fatigue + v, 0, 100);
-      else if (k === "fitness") h.fitness = clamp(h.fitness + v, 0, 100);
-      else (h as unknown as Record<string, number>)[k] = clamp(Math.round((((h as unknown as Record<string, number>)[k]) + v * mult * (1 - ((h as unknown as Record<string, number>)[k]) / 100) * 2) * 10) / 10, 0, 99);
+      if (k === "fat") { h.fatigue = clamp(h.fatigue + v, 0, 100); return; }
+      if (k === "fitness") { h.fitness = clamp(h.fitness + v, 0, 100); return; }
+      const stat = h as unknown as Record<string, number>;
+      const ceiling = h.statCeilings[k as keyof Horse["statCeilings"]];
+      const before = stat[k];
+      stat[k] = clamp(Math.round((before + v * mult * (1 - before / ceiling) * 2) * 10) / 10, 0, ceiling);
+      if (ceiling - stat[k] < 2) nearCeiling.add(k);
     });
     if (p === "rest") h.morale = clamp(h.morale + 2, 0, 100);
     if (!walking) {
       const primary = PRIMARY_STAT[p];
-      reportLines.push(primary
-        ? `${h.name}: ${TRAINING_LABEL[p]} — ${primary.label} now ${Math.round(h[primary.key])}.`
-        : `${h.name}: ${TRAINING_LABEL[p]}.`);
+      reportLines.push(
+        primary && nearCeiling.has(primary.key)
+          ? `${h.name} trained well today, but seems to be reaching full potential — there might not be much more ${primary.label} to find.`
+          : primary
+            ? `${h.name}: ${TRAINING_LABEL[p]} — ${primary.label} now ${Math.round(h[primary.key])}.`
+            : `${h.name}: ${TRAINING_LABEL[p]}.`,
+      );
     }
     if (["gallop", "sprints"].includes(p) && Math.random() < 0.02 + (h.fatigue / 100) * 0.05) {
       h.injuryDays = ri(3, 9);
       msgs.push({ day: s.day, text: `${h.name} pulled up short on the gallops — ${h.injuryDays} days on the easy list.` });
     }
   });
-  if (trainedActively) skill = clamp(skill + 1, 0, 100);
+  // Skill is an XP bar with a diminishing approach curve, same shape as horse
+  // stats' ceiling-targeting formula — was a flat +1/day with a hard stop at
+  // 100 before, which just abruptly froze rather than visibly slowing down.
+  if (trainedActively) skill = clamp(Math.round((skill + 1 * (1 - skill / 100)) * 10) / 10, 0, 100);
 
   if (walking) {
     mastery[walkPlan!] = clamp(mastery[walkPlan!] + 8, 0, 100);
-    skill = clamp(skill + 4, 0, 100);
+    skill = clamp(Math.round((skill + 4 * (1 - skill / 100)) * 10) / 10, 0, 100);
     reportLines.push(`Spent the day at ${walkPlan}, walking every yard from stalls to winning post — course knowledge now ${Math.round(mastery[walkPlan!])}/100. The string had an easy day back home.`);
   }
-  if (skill > skillBefore) reportLines.push(`Skill: +${skill - skillBefore} (now ${Math.round(skill)}/100).`);
+  if (skill > skillBefore) reportLines.push(`Skill: +${(Math.round((skill - skillBefore) * 10) / 10).toFixed(1)} (now ${Math.round(skill)}/100).`);
 
   // --- passive study: +1/day, with occasional windfalls from racing people ---
   const study = s.study;
@@ -469,7 +527,9 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
   else if (roll < 0.5) {
     newsLine = pick(NEWS_LINES(yard, Object.keys(COURSES)));
   } else if (roll < 0.8) {
-    const tm = trainingMoment({ ...s, horses });
+    // ~30% of decision-days are a quiz instead of an ordinary training
+    // moment — keeps total decision frequency unchanged.
+    const tm = Math.random() < 0.3 ? quizMoment({ ...s, horses }) : trainingMoment({ ...s, horses });
     if (tm) queue = [tm]; else newsLine = pick(QUIET_DAYS);
   } else newsLine = null;
 
@@ -484,6 +544,16 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
   if (!milestones.tier2Unlocked && reputation >= 35) {
     milestones.tier2Unlocked = true;
     msgs.push({ day: s.day, text: `Word is getting around about you. ${yard.boss}: "You've earned a look at the bigger tracks — Ascot, York, Chester, Doncaster. Don't waste it." Entries are open at the tier-2 courses from today.` });
+  }
+
+  // --- Press Room: a "pick a fight" action can schedule a rival comeback a
+  // few days out — plain day-number data, not a stored closure, since state
+  // has to survive JSON.stringify for localStorage. Checked the same way as
+  // the trade-offer milestone just below. ---
+  let pressRoomFollowupDay = s.pressRoomFollowupDay;
+  if (pressRoomFollowupDay !== null && s.day >= pressRoomFollowupDay) {
+    pressRoomFollowupDay = null;
+    queue = [...queue, makeRivalClapback()];
   }
 
   // --- milestone: swap offers (second/third horse are earned via race results now — see resolveRaceDay) ---
@@ -519,6 +589,7 @@ export function advanceDay(s: GameState, plan: Record<number, TrainingPlan>, wal
     ...s, day, year, horses, trust, cash, reputation, celebrity, skill, mastery, slate, entered, story, results, milestones,
     messages: [...msgs, ...s.messages].slice(0, 60), news: newsLine, queue,
     flash: flashLines.length ? flashLines : null,
+    pressRoomUsed: {}, pressRoomFollowupDay,
   };
 }
 
@@ -526,7 +597,20 @@ export function chooseDecision(s: GameState, i: number): GameState {
   const d = s.queue[0];
   if (!d) return s;
   const next = d.choices[i].apply(s);
-  return { ...next, queue: next.queue.slice(1) };
+  // chooseDecision is the one place every decision-driven metric change
+  // already flows through, so threshold-crossing detection lives here
+  // rather than in every individual apply() — see lib/game/metrics.ts.
+  const events = checkThresholds(s, next, YARD.boss.split(" ")[0]);
+  const withThresholds = events.length
+    ? {
+      ...next,
+      cash: next.cash + events.reduce((sum, e) => sum + e.cash, 0),
+      messages: next.messages.length
+        ? [{ ...next.messages[0], text: `${next.messages[0].text} ${events.map(e => e.text).join(" ")}` }, ...next.messages.slice(1)]
+        : [{ day: next.day, text: events.map(e => e.text).join(" ") }, ...next.messages],
+    }
+    : next;
+  return { ...withThresholds, queue: withThresholds.queue.slice(1) };
 }
 
 export function enterRace(s: GameState, raceOpt: RaceCard, horseId: number): GameState {

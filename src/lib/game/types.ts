@@ -60,7 +60,7 @@ export interface Choice {
 // `tag` is optional, cosmetic-only — a short category label (PRESS/BOSS/
 // RIVAL/TRAINING/FAMILY) the UI uses to give decisions a bit of visual
 // variety instead of every overlay looking identical.
-export type DecisionTag = "PRESS" | "BOSS" | "RIVAL" | "TRAINING" | "FAMILY" | "YARD";
+export type DecisionTag = "PRESS" | "BOSS" | "RIVAL" | "TRAINING" | "FAMILY" | "YARD" | "QUIZ";
 
 export interface DecisionEvent {
   title: string;
@@ -83,7 +83,7 @@ export interface RaceResultEntry {
   cmt: string;
 }
 
-export type TrainingPlan = "gallop" | "canter" | "sprints" | "stalls" | "school" | "easy" | "rest";
+export type TrainingPlan = "gallop" | "canter" | "sprints" | "stalls" | "school" | "sharp" | "easy" | "rest";
 
 // Act 1 scripted-narrative state — see lib/game/story.ts. `stage` values
 // "yard" and "horsePick" are the only ones needing special full-screen
@@ -141,4 +141,19 @@ export interface GameState {
   news: string | null;
   milestones: Milestones;
   ending: { verdict: "contract" | "poached" | "released"; text: string } | null;
+
+  // Quiz mechanic (lib/game/quiz.ts) — quizCount increments on every quiz
+  // asked, used both to schedule missed-question re-asks ("3 questions'
+  // time" means 3 quiz occurrences, not calendar days) and to gradually
+  // shift the difficulty pool harder over the course of a playthrough.
+  quizCount: number;
+  quizMissed: { id: string; dueAfter: number }[];
+
+  // Press Room (components/game/PressRoomTab.tsx) — player-initiated
+  // actions, each usable once per day; pressRoomUsed resets to {} every
+  // advanceDay(). pressRoomFollowupDay schedules the rival's press comeback
+  // after "pick a fight" — plain data, not a stored closure, since state
+  // has to survive JSON.stringify for localStorage.
+  pressRoomUsed: Record<string, boolean>;
+  pressRoomFollowupDay: number | null;
 }

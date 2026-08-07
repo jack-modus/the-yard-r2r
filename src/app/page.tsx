@@ -21,6 +21,9 @@ import { StableTab } from "@/components/game/StableTab";
 import { RacingTab, type RaceSub, type ResultsFilter } from "@/components/game/RacingTab";
 import { NotebookTab } from "@/components/game/NotebookTab";
 import { YardTab } from "@/components/game/YardTab";
+import { PressRoomTab } from "@/components/game/PressRoomTab";
+import { pressRoomAction } from "@/lib/game/pressRoom";
+import type { PressRoomActionId } from "@/lib/game/pressRoom";
 import { COLUMN, COLUMN_PLAIN } from "@/components/ui/layout";
 import { Button } from "@/components/ui/Button";
 
@@ -109,6 +112,13 @@ export default function Home() {
 
   const toggleStudy = (course: CourseName) => setG(s => s && ({ ...s, study: s.study === course ? null : course }));
 
+  const doPressRoomAction = (action: PressRoomActionId, horseId?: number) => setG(s => {
+    if (!s) return s;
+    const next = pressRoomAction(s, action, horseId);
+    if (next !== s) setOutcomeText(next.messages[0]?.text ?? null);
+    return next;
+  });
+
   return (
     <div className="min-h-screen bg-ink-950">
     <div className={`${COLUMN} font-diary text-[#eee6f2] pb-24`}>
@@ -177,6 +187,8 @@ export default function Home() {
       {tab === "notebook" && (
         <NotebookTab g={g} yard={yard} walkPlan={walkPlan} onWalkPlan={setWalkPlan} onToggleStudy={toggleStudy} />
       )}
+
+      {tab === "press" && <PressRoomTab g={g} onAction={doPressRoomAction} />}
 
       {tab === "yard" && <YardTab g={g} yard={yard} />}
 

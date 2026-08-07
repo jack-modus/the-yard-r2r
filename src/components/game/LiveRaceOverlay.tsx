@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/Button";
 import type { LiveRace } from "@/lib/game/types";
 import { COLUMN_PLAIN } from "@/components/ui/layout";
+import { TrackVisual } from "@/components/game/TrackVisual";
 
 export function LiveRaceOverlay({ liveRace, onNext }: { liveRace: LiveRace; onNext: () => void }) {
   const done = liveRace.idx + 1 >= liveRace.beats.length;
@@ -21,28 +22,7 @@ export function LiveRaceOverlay({ liveRace, onNext }: { liveRace: LiveRace; onNe
           ))}
         </div>
 
-        <div className="relative bg-ink-900 rounded-sm border border-line mb-2.5 pt-4 pb-1.5 px-1">
-          <div className="absolute left-1 top-0.5 font-mono text-[8px] text-muted-dim tracking-wide">STALLS</div>
-          <div className="absolute right-1 top-0.5 font-mono text-[8px] text-gold-500 tracking-wide">FINISH</div>
-          <div className="absolute left-1 top-4 bottom-1.5 w-px bg-line" />
-          <div className="absolute right-1 top-4 bottom-1.5 w-px bg-gold-500/60" />
-          {track.runners.map(r => (
-            <div key={r.number} className="relative h-[17px]">
-              <div
-                className={`absolute top-0 flex items-center justify-center rounded-full font-mono transition-all duration-500 ease-out ${
-                  r.player ? "w-4 h-4 text-[8.5px] ring-2 ring-gold-400 z-10" : "w-3.5 h-3.5 text-[7.5px]"
-                }`}
-                style={{
-                  left: `calc(${r.positions[liveRace.idx] * 100}% - ${r.player ? 8 : 7}px)`,
-                  background: r.silk,
-                  color: "#f6f1e7",
-                }}
-              >
-                {r.number}
-              </div>
-            </div>
-          ))}
-        </div>
+        <TrackVisual track={track} idx={liveRace.idx} course={liveRace.course} dist={liveRace.dist} />
 
         <div className="text-[15.5px] leading-relaxed min-h-[90px] font-diary">{liveRace.beats[liveRace.idx]}</div>
         <Button className="block w-full mt-2.5 text-center text-sm" onClick={onNext}>

@@ -74,6 +74,8 @@ export interface LiveRace {
   beats: string[];
   idx: number;
   track: RaceTrack;
+  course: CourseName;
+  dist: number;
 }
 
 export interface RaceResultEntry {

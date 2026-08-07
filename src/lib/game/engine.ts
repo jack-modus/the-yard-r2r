@@ -314,7 +314,10 @@ export function resolveRaceDay(st: GameState, tactic: Tactic, raceId: number): G
     ...st, horses, roster, trust, cash, reputation, celebrity, skill, mastery, milestones, results,
     entered: st.entered.filter(r => r.id !== raceId), story, ending,
     queue: [...st.queue, ...queueExtra],
-    liveRace: { raceName: race.name, beats: makeBeats(race, res, mine, tactic), idx: 0, track: computeRaceTrack(res, mine, tactic) },
+    liveRace: {
+      raceName: race.name, beats: makeBeats(race, res, mine, tactic), idx: 0, track: computeRaceTrack(res, mine, tactic),
+      course: race.course, dist: race.dist,
+    },
     messages: [...msgs, ...st.messages].slice(0, 60),
   };
 }

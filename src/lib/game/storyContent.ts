@@ -13,21 +13,11 @@ import type { ClassicOutcome, DecisionEvent, GameState } from "./types";
 export const BEAT3_YARD: DecisionEvent = {
   title: "Out in the yard",
   tag: "YARD",
-  text: `A jockey leans on the rail near the last box, watching you find your feet — Rossa Bellini, the stable's number one, sizing up the new assistant the way jockeys size up everything: quickly, and without much interest in being wrong. You tell him the plan anyway — not just to win, but to be the best. A Group 1. Eventually, the Classics. All of them.\n\nHe laughs, not unkindly. "Okay mate. Best win a race first. Ask me again after."`,
+  text: `A jockey leans on the rail near the last box, watching you find your feet — Rossa Bellini, the stable's number one, sizing up the new assistant the way jockeys size up everything: quickly, and without much interest in being wrong. You tell him the plan anyway — not just to win, but to be the best. A Group 1. Eventually, the Classics. All of them.\n\nHe laughs, not unkindly. "Okay mate. Best win a race first. Ask me again after." He nods once, like that settles it, and goes back to his own horse.`,
   choices: [
     {
-      label: "\"Yes — I'll do it.\"",
-      apply: st => note(
-        { ...st, reputation: clamp(st.reputation - 2, 0, 100), celebrity: clamp(st.celebrity + 3, 0, 100), awaitingHorsePick: true },
-        `The jockey raises an eyebrow at the certainty. Word of the big talk gets round the yard before lunch. (Reputation -2, Celebrity +3.)`,
-      ),
-    },
-    {
-      label: "\"I'll do my best.\"",
-      apply: st => note(
-        { ...st, reputation: clamp(st.reputation + 1, 0, 100), awaitingHorsePick: true },
-        `"Fair enough," he says. "At least you're not a blowhard." Not much said, but it lands the right way. (Reputation +1.)`,
-      ),
+      label: "Continue →",
+      apply: st => note({ ...st, awaitingHorsePick: true }, `Big talk, quietly made. Now it's just a matter of proving it.`),
     },
   ],
 };
@@ -35,45 +25,33 @@ export const BEAT3_YARD: DecisionEvent = {
 // ---------- Beat 2b: Ray Fenwick, the head lad — texture before the pick ----------
 // Purely characterisation, same "no repercussions" pattern as Beat 2's
 // internal question — added because the run straight from office to horse
-// pick felt too rushed in playtesting.
+// pick felt too rushed in playtesting. No choices, per later feedback that
+// these early "decisions" felt like fake interaction rather than real
+// ones — just narrative beats the player clicks through.
 export const BEAT2B_HEAD_LAD: DecisionEvent = {
   title: "Ray Fenwick, head lad",
   tag: "YARD",
-  text: `Ray Fenwick meets you at the yard gates before Bridges has finished his coffee — head lad here longer than some of the horses have been alive. He doesn't offer a hand. "So you're the one." A pause, sizing you up properly. "I mucked out for your grandfather one summer, years back. Best horseman I ever worked for. Your father—" he stops himself there. "Well. Let's see what you're made of instead of talking about it."\n\nHe walks you down the row of boxes — six horses, six sets of ears pricking up at a stranger's footsteps. "Feed's at six, work starts at half six, and I don't care whose grandson you are if a horse goes hungry on your watch." He hands you a headcollar without asking if you want it. "Right. Let's get you started."`,
+  text: `Ray Fenwick meets you at the yard gates before Bridges has finished his coffee — head lad here longer than some of the horses have been alive. He doesn't offer a hand. "So you're the one." A pause, sizing you up properly. "I mucked out for your grandfather one summer, years back. Best horseman I ever worked for. Patient — more than I can say for most of you young ones. Your father—" he stops himself there. "Well. Let's see what you're made of instead of talking about it."\n\nHe walks you down the row of boxes — six horses, six sets of ears pricking up at a stranger's footsteps. "Feed's at six, work starts at half six, and I don't care whose grandson you are if a horse goes hungry on your watch." He hands you a headcollar without asking if you want it. "Right. Let's get you started."`,
   choices: [
     {
-      label: "Get straight to work — no speeches needed.",
-      apply: st => note({ ...st, queue: [...st.queue, BEAT3_YARD] }, `Ray almost smiles. Almost. "Good answer."`),
-    },
-    {
-      label: "Ask him what your grandfather was really like.",
-      apply: st => note(
-        { ...st, queue: [...st.queue, BEAT3_YARD] },
-        `Ray considers it a long moment. "Patient. Which is more than I can say for most of you young ones." He leaves it there and gets back to work.`,
-      ),
+      label: "Continue →",
+      apply: st => note({ ...st, queue: [...st.queue, BEAT3_YARD] }, `Ray showed you round without much ceremony. It felt like the right kind of welcome.`),
     },
   ],
 };
 
 // ---------- Beat 2: Bridges' office ----------
+// No choices, per playtesting feedback that these opening beats' "decisions"
+// weren't real ones — Bridges' terms and Tony's resolve are narrated
+// directly rather than picked from two near-identical lines.
 export const BEAT2_BRIDGES_OFFICE: DecisionEvent = {
   title: "In Bridges' office",
   tag: "BOSS",
-  text: `Bridges doesn't stand. "A fresh start — for you. I'm taking a bit of a risk here, and I want to be straight about why." He lets that sit. "Your father owed a lot of people money by the end. Rubbed a lot of people up the wrong way, too. He was a good trainer, Tony — a genuinely good one — but he gambled every bit of it away. Can you assure me you won't do the same?"\n\nHe nods at a black-and-white photograph on the wall — two men at the races, sharp suits, a winner's enclosure. "That's my father. And that" — he taps the other man — "is your grandfather. He was a great man, your grandfather. One of the best I ever saw. Your father could have been him. He chose not to be."\n\nHe doesn't wait for an answer out loud. You ask yourself the question instead.`,
+  text: `Bridges doesn't stand. "A fresh start — for you. I'm taking a bit of a risk here, and I want to be straight about why." He lets that sit. "Your father owed a lot of people money by the end. Rubbed a lot of people up the wrong way, too. He was a good trainer, Tony — a genuinely good one — but he gambled every bit of it away. Can you assure me you won't do the same?"\n\nHe nods at a black-and-white photograph on the wall — two men at the races, sharp suits, a winner's enclosure. "That's my father. And that" — he taps the other man — "is your grandfather. He was a great man, your grandfather. One of the best I ever saw. Your father could have been him. He chose not to be."\n\nHe doesn't wait for an answer out loud, and you don't try to give him one — some promises aren't worth saying, only keeping. "Right," he says, as if you'd answered anyway. "Go and find Ray — he'll show you round. I've got one horse spare for you to make something of. Just the one, mind — earn the rest."`,
   choices: [
     {
-      label: "I'll be my grandfather, not my father.",
-      apply: st => note(
-        { ...st, queue: [...st.queue, BEAT2B_HEAD_LAD] },
-        `Bridges: "Good. Go and find Ray — he'll show you round. I've got one horse spare for you to make something of. Just the one, mind — earn the rest."`,
-      ),
-    },
-    {
-      label: "I don't know yet — but I intend to find out.",
-      apply: st => note(
-        { ...st, queue: [...st.queue, BEAT2B_HEAD_LAD] },
-        `Bridges: "Fair enough. Go and find Ray — he'll show you round. I've got one horse spare for you to make something of. Just the one, mind — earn the rest."`,
-      ),
+      label: "Continue →",
+      apply: st => note({ ...st, queue: [...st.queue, BEAT2B_HEAD_LAD] }, `Bridges laid out the deal — a fresh start, on trust that hasn't been earned yet. You mean to earn it.`),
     },
   ],
 };
